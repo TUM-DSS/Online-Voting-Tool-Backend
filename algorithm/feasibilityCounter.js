@@ -9,7 +9,6 @@ function FeasibilityCounter(states) {
 FeasibilityCounter.prototype = {
   hasNext: function() {
     return this.number<this.max;
-
   },
 
   next: function() {

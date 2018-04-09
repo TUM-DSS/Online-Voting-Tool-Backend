@@ -160,11 +160,14 @@ exports._computePolytope = function (model,size) {
 
   let solution = solver.Solve(model);
   let value = solution.result;
-  let out = new Set([exports._getLotteryFromSolution(solution,size).toString()])
+
+  let sol = exports._getLotteryFromSolution(solution,size).toString();
+
+  let map = {}
+  map[0] = sol;
+  let out = new Set()//([sol])
 
   while(counter.hasNext()) {
-    console.log(abortTime);
-    console.log(+new Date());
     if( (+new Date()) > abortTime) {
       exports.abort = true;
       return [];
@@ -187,9 +190,30 @@ exports._computePolytope = function (model,size) {
 
     solution = solver.Solve(model);
     if(solution.feasible) {
-      out.add(exports._getLotteryFromSolution(solution,size).toString());
+
+      //For entry in map
+        //if (oldEntry & newEntry) = oldEntry
+          //Remove oldEntry
+        //Add new Entry
+      for (var oldEntry in map) {
+        if (map.hasOwnProperty(oldEntry)) {
+          if((oldEntry & counter.prev) == oldEntry) {
+            delete map[oldEntry];
+          }
+        }
+      }
+
+      map[counter.prev] = sol
+      sol = exports._getLotteryFromSolution(solution,size).toString()
+      //out.add(sol);
     } else {
       counter.infesible();
+    }
+  }
+
+  for (var entry in map) {
+    if (map.hasOwnProperty(entry)) {
+      out.add(map[entry])
     }
   }
 
