@@ -29,7 +29,7 @@ exports.kemeny = function kemeny(data) {
   let size = data.staircase[0].length+1;
 
   //Abort Search after 3 Seconds
-  let abortTime = (+new Date()) + 3000;
+  let abortTime = (+new Date()) + 10000;
 
   let permutations = exports._getPermutations(size,abortTime);
 

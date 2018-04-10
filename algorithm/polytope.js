@@ -13,6 +13,19 @@ homogeneousFesibilityPolytope
 
 exports.maxLottery = function maxLottery(data) {
   let size = data.staircase[0].length+1;
+  if(data.staircase.every( array => array.every(entry => entry == 0))) {
+
+    let res = Array.from(new Array(size), (x,i)=> {
+      return Array.from(new Array(size), (y,j) => i==j?1:0)
+    });
+
+    return {
+      success: true,
+      type: types.Lotteries,
+      result:res
+    }
+  }
+
   let model = exports._getMaxLotteryLP(data);
 
   let lotteries = exports._computePolytope(model,size);
@@ -106,7 +119,6 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
     constraint += "-1 Value >= 0";
     model.push(constraint);
   }
-
   return solver.ReformatLP(model);
 }
 
@@ -145,7 +157,7 @@ exports._computePolytope = function (model,size) {
 
   exports.abort = false;
   //Abort Search after 3 Seconds
-  let abortTime = (+new Date()) + 3000;
+  let abortTime = (+new Date()) + 10000;
 
   /*let constraintState = Array.from(new Array(index.length), x => true);
   let polySet = exports._searchPolytope(model,index,constraintState,size);
@@ -161,6 +173,10 @@ exports._computePolytope = function (model,size) {
   let solution = solver.Solve(model);
   let value = solution.result;
 
+  if(!solution.feasible) {
+    return [];
+  }
+  
   let sol = exports._getLotteryFromSolution(solution,size).toString();
 
   let map = {}
@@ -190,7 +206,6 @@ exports._computePolytope = function (model,size) {
 
     solution = solver.Solve(model);
     if(solution.feasible) {
-
       //For entry in map
         //if (oldEntry & newEntry) = oldEntry
           //Remove oldEntry
@@ -203,8 +218,8 @@ exports._computePolytope = function (model,size) {
         }
       }
 
-      map[counter.prev] = sol
       sol = exports._getLotteryFromSolution(solution,size).toString()
+      map[counter.prev] = sol
       //out.add(sol);
     } else {
       counter.infesible();
@@ -221,6 +236,18 @@ exports._computePolytope = function (model,size) {
   for (data of out) {
     lotteries.push(JSON.parse("["+data+"]"));
   }
+
+  lotteries.sort( (a,b) => {
+    for(let i=0;i<a.length;i++) {
+      if(a[i]>b[i]) {
+        return -1
+      } else if(a[i]<b[i]) {
+        return 1;
+      }
+    }
+    return 0;
+  })
+
   return lotteries;
 };
 

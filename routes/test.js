@@ -40,7 +40,14 @@ function _checkPairwiseComparison(lottery,preferenceProfile) {
 
 function _checkStochsticDominance(lottery, preferenceProfile) {
   let model = _getStochsticDominanceLP(lottery,preferenceProfile);
-  return _getLotteryFromLPSolution(lottery, model);
+  let out = _getLotteryFromLPSolution(lottery, model);
+  /*if(out.success == false) {
+    return {
+      success: true,
+      efficient: true
+    }
+  }*/
+  return out;
 }
 
 function _getLotteryFromLPSolution(lottery,model) {
@@ -83,6 +90,7 @@ function _getLotteryFromLPSolution(lottery,model) {
       }
     }
   } else {
+    console.log("Failed",solution);
     return {
       success: false,
       msg: "LP infesible"
@@ -130,7 +138,7 @@ function _getPairwiseComparisonLP(lottery,preferenceProfile) {
     }
 
     for (var l = 0; l < qIndex.length; l++) {
-      if(qIndex!=0) {
+      if(Math.abs(qIndex[l])>0.000001) {
         constraint += qIndex[l]+"  "+_qLotteryName(l)+" ";
       }
     }
@@ -179,9 +187,12 @@ function _getStochsticDominanceLP(lottery,preferenceProfile) {
       }
       constraint += count+" "+_rMatrixName(i,j)+" ";
 
+      //Value can't be negative
+      value = Math.max(value,0);
       model.push(constraint+" = "+value);
     }
   }
+  console.log(model);
 
   let constraint = "";
   for (var i = 0; i < nrOfCandidates; i++) {
@@ -195,6 +206,7 @@ function _getStochsticDominanceLP(lottery,preferenceProfile) {
       model.push(_rMatrixName(i,j)+" >= 0");
     }
   }
+
   return solver.ReformatLP(model);
 }
 
