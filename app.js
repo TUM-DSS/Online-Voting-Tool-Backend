@@ -1,3 +1,5 @@
+//Main File of the Server
+//Get Middleware
 const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
@@ -9,7 +11,7 @@ const extract = require("./routes/extract");
 const vote = require("./routes/vote");
 const test = require("./routes/test");
 
-const port =process.env.PORT || 8080; //30000;
+const port =process.env.PORT || 8080;
 
 app.use(cors());
 

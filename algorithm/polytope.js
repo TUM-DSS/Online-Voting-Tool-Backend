@@ -2,15 +2,15 @@ const helper = require('./helper');
 const types = require('./answerTypes');
 const solver = require('javascript-lp-solver');
 const feasibilityCounter = require('./feasibilityCounter');
-/*
-maxLottery
-homogeneousMaximalLottery
-essentialSet
-maxLotteryFesibilityPolytope
-homogeneousFesibilityPolytope
 
+/**
+* Computes the polytopes of
+* maxLottery, essentialSet and homogeneousMaximalLottery
 */
 
+/**
+* Compute the polytope of the MaximalLottery
+*/
 exports.maxLottery = function maxLottery(data) {
   let size = data.staircase[0].length+1;
   if(data.staircase.every( array => array.every(entry => entry == 0))) {
@@ -30,14 +30,15 @@ exports.maxLottery = function maxLottery(data) {
 
   let lotteries = exports._computePolytope(model,size);
 
+  //The polytope is empty
   if(lotteries.length == 0) {
+    //Computation timed out
     if(exports.abort) {
       return {
         success: false,
         msg: "Server Timeout"
       }
     }
-
 
     return {
       success: false,
@@ -52,6 +53,10 @@ exports.maxLottery = function maxLottery(data) {
   }
 }
 
+/**
+* Compute the polytope of the homogeneousMaximalLottery by mapping the staircase first
+* and then computing the maximal lottery
+*/
 exports.homogeneousMaximalLottery = function homogeneousMaximalLottery(data) {
   let exp = data.parameter;
   if(typeof exp != "number") {
@@ -61,6 +66,10 @@ exports.homogeneousMaximalLottery = function homogeneousMaximalLottery(data) {
   return exports.maxLottery(data)
 }
 
+/**
+* Computes the essential set by computing the maximal lottery polytope an listing all candidates
+* with positive support
+*/
 exports.essentialSet = function essentialSet(data) {
   let res = exports.maxLottery(data);
   if(!res.success) {
@@ -92,12 +101,18 @@ exports.essentialSet = function essentialSet(data) {
   }
 }
 
+/**
+* Get the maximal lottery LP for a given staircase
+*/
 exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
   marg = helper.getFullMargins(data.staircase);
   size = marg[0].length;
 
+  //We use the unoptimized Minimax Strategy LP
+  //maximize Value
   model = [ "max: Value"];
 
+  //We want a lottery over the candidates
   let constraintB = "";
   for (var i = 0; i < size; i++) {
     let constraintA = exports._voteName(i)+" >= 0"
@@ -107,6 +122,7 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
   constraintB += " = 1";
   model.push(constraintB);
 
+  //The expreced payoff of the lottery must be at least as high as the value
   for (var j = 0; j < size; j++) {
     let constraint = ""
     for (var i = 0; i < size; i++) {
@@ -122,6 +138,9 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
   return solver.ReformatLP(model);
 }
 
+/**
+* Maps a LP solution to its corresponding lottery.
+*/
 exports._getLotteryFromSolution = function(solution,size) {
   let lottery = [];
   for (var i = 0; i < size; i++) {
@@ -134,8 +153,12 @@ exports._getLotteryFromSolution = function(solution,size) {
   return lottery;
 }
 
+/**
+* Computes the corners of a polytope by enumerating all constraint combination
+*/
 exports._computePolytope = function (model,size) {
   index = [];
+  //Get the <=  and >= constraints (i.e. the constraints that can be tight in a corner)
   for (var constraint in model.constraints) {
     if (model.constraints.hasOwnProperty(constraint)) {
       if(model.constraints[constraint].hasOwnProperty("min")){
@@ -156,17 +179,8 @@ exports._computePolytope = function (model,size) {
   }
 
   exports.abort = false;
-  //Abort Search after 3 Seconds
+  //Abort Search after 10 Seconds
   let abortTime = (+new Date()) + 10000;
-
-  /*let constraintState = Array.from(new Array(index.length), x => true);
-  let polySet = exports._searchPolytope(model,index,constraintState,size);
-
-  lotteries = [];
-  for (data of polySet) {
-    lotteries.push(JSON.parse("["+data+"]"));
-  }
-  return lotteries;*/
 
   let counter = new feasibilityCounter(index.length);
 
@@ -176,9 +190,10 @@ exports._computePolytope = function (model,size) {
   if(!solution.feasible) {
     return [];
   }
-  
+
   let sol = exports._getLotteryFromSolution(solution,size).toString();
 
+  //Map maps the state number (= the set of thight constraints) to the result
   let map = {}
   map[0] = sol;
   let out = new Set()//([sol])
@@ -206,10 +221,8 @@ exports._computePolytope = function (model,size) {
 
     solution = solver.Solve(model);
     if(solution.feasible) {
-      //For entry in map
-        //if (oldEntry & newEntry) = oldEntry
-          //Remove oldEntry
-        //Add new Entry
+      //Check if the theight constraints of the found solution is a superset of another solution
+      //if so remove this other solution since it isn't maximal (i.e. not a corner)
       for (var oldEntry in map) {
         if (map.hasOwnProperty(oldEntry)) {
           if((oldEntry & counter.prev) == oldEntry) {
@@ -251,39 +264,9 @@ exports._computePolytope = function (model,size) {
   return lotteries;
 };
 
-/*
-exports._searchPolytope = function(model,index,state,size,position = 0) {
-  //Modify Model to state
-  state.forEach( (x,i) => {
-    if(x) {
-      model.constraints[index[i].name] = { equal: index[i].value}
-    } else {
-      if(index[i].type== "min") {
-        model.constraints[index[i].name] = { min: index[i].value}
-      } else {
-        model.constraints[index[i].name] = { max: index[i].value}
-      }
-    }
-  });
-
-  solution = solver.Solve(model);
-  if(solution.feasible) {
-    return new Set([exports._getLotteryFromSolution(solution,size).toString()]);
-  }
-
-  let out = new Set();
-  for (var i = position; i < state.length; i++) {
-    if(state[i]) {
-        let copy = state.slice();
-        copy[i] = false;
-        let res = exports._searchPolytope(model,index,copy,size,i+1);
-        res.forEach(e => out.add(e));
-    }
-  }
-  return out;
-}
+/**
+* Scaling function for homogeneousMaximalLottery f(x,e) = sign(x)*|x|^e
 */
-
 exports._signedExponent = function signedExponent(x,e) {
   return Math.sign(x)*Math.pow(Math.abs(x),e);
 }

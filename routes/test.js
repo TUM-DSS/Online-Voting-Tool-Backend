@@ -1,7 +1,14 @@
+//Answer efficency querrys.
 const express = require('express');
 const router = express.Router();
 const solver = require('javascript-lp-solver');
 
+/**
+* Handle test requests
+* {lotteries,profile} => {success, sdresult, pcresult}
+* sdresult => [{success,efficient,dominator?,msg?}]
+* pcresult => [{success,efficient,dominator?,msg?}]
+*/
 router.post("",(req,res,next) => {
   let lotteries = req.body.lotteries;
   let profile = req.body.profile;
@@ -20,7 +27,8 @@ module.exports = router;
 function checkSDEfficency(lotteries,profile) {
   let out = [];
   for (lottery of lotteries) {
-    out.push(_checkStochsticDominance(lottery,profile));
+    let model = _getStochsticDominanceLP(lottery,profile);
+    out.push(_getLotteryFromLPSolution(lottery, model));
   }
   return out;
 }
@@ -28,28 +36,15 @@ function checkSDEfficency(lotteries,profile) {
 function checkPCEfficency(lotteries,profile) {
   let out = [];
   for (lottery of lotteries) {
-    out.push(_checkPairwiseComparison(lottery,profile));
+    let model = _getPairwiseComparisonLP(lottery,profile);
+    out.push(_getLotteryFromLPSolution(lottery, model));
   }
   return out;
 }
 
-function _checkPairwiseComparison(lottery,preferenceProfile) {
-  let model = _getPairwiseComparisonLP(lottery,preferenceProfile);
-  return _getLotteryFromLPSolution(lottery, model);
-}
-
-function _checkStochsticDominance(lottery, preferenceProfile) {
-  let model = _getStochsticDominanceLP(lottery,preferenceProfile);
-  let out = _getLotteryFromLPSolution(lottery, model);
-  /*if(out.success == false) {
-    return {
-      success: true,
-      efficient: true
-    }
-  }*/
-  return out;
-}
-
+/**
+* Solves a SD/PC LP and gets the dominating lottery if it extists.
+*/
 function _getLotteryFromLPSolution(lottery,model) {
   let solution = solver.Solve(model);
 
@@ -62,6 +57,7 @@ function _getLotteryFromLPSolution(lottery,model) {
     } else {
       let dominator = []
 
+      //Extract the lottery from the LP solution
       for (var i = 0; i < lottery.length; i++) {
           if(solution.hasOwnProperty(_qLotteryName(i))) {
             dominator.push(solution[_qLotteryName(i)]);
@@ -98,10 +94,14 @@ function _getLotteryFromLPSolution(lottery,model) {
   }
 }
 
+/**
+*  Get the LP fro Checking PC efficency
+*/
 function _getPairwiseComparisonLP(lottery,preferenceProfile) {
   let nrOfCandidates = lottery.length;
   let nrOfVoters = preferenceProfile.length;
 
+  //max  sum_(i in voters) e_i
   let rGoal = "max: ";
   for (var i = 0; i < nrOfVoters; i++) {
     rGoal+="1 "+_getEpsilonName(i)+" ";
@@ -109,11 +109,14 @@ function _getPairwiseComparisonLP(lottery,preferenceProfile) {
 
   let model = [rGoal];
 
+  //forall i e_i >= 0
   for (var i = 0; i < nrOfVoters; i++) {
     model.push("1 "+_getEpsilonName(i)+" >= 0");
   }
 
   // q is a lottery
+  //sum_(i in voters) q_i = 1
+  //forall i q_i >=0
   let constraint = "";
   for (var i = 0; i < nrOfCandidates; i++) {
     constraint += "1 "+_qLotteryName(i)+" ";
@@ -154,15 +157,15 @@ function _getEpsilonName(voter) {
   return "e_"+voter;
 }
 
+/**
+* Get the LP fro Checking SD efficency
+*/
 function _getStochsticDominanceLP(lottery,preferenceProfile) {
-  /*
-  lottery: [0.1,0.4,0.2,0.3]
-  preferenceProfile: [[1,3,2,0],[3,2,1,0],...]
-  */
   let nrOfCandidates = lottery.length;
   let nrOfVoters = preferenceProfile.length;
 
   //Goal function
+  // max sum_(i in voters) sum_(j in candidates) r_(i,j)
   let rGoal = ""
   for (let i=0; i < nrOfVoters; i++) {
     for (let j=0; j< nrOfCandidates; j++) {
@@ -194,6 +197,7 @@ function _getStochsticDominanceLP(lottery,preferenceProfile) {
   }
   console.log(model);
 
+  //q is a lottery
   let constraint = "";
   for (var i = 0; i < nrOfCandidates; i++) {
     constraint += "1 "+_qLotteryName(i)+" ";
@@ -201,6 +205,7 @@ function _getStochsticDominanceLP(lottery,preferenceProfile) {
   }
   model.push(constraint+" = 1");
 
+  //forall i,j r_(i,j) >=0
   for (let i=0; i < nrOfVoters; i++) {
     for (let j=0; j< nrOfCandidates; j++) {
       model.push(_rMatrixName(i,j)+" >= 0");

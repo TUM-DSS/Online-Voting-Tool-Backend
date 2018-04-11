@@ -1,3 +1,12 @@
+/**
+* Datastructure for polytope enumeration
+* Counter iterates from 0 to 2^n
+* if a number is marked as infeasible
+* all numbers that match the bitmask of the marked number are skiped
+* Since each bitmask is interpreted as a set of constraints this means that if
+* Constraint set x is infeasible so are all supersets of x.
+*/
+
 function FeasibilityCounter(states) {
   this.prev = 0;
   this.number = 1;
@@ -32,6 +41,7 @@ FeasibilityCounter.prototype = {
     return out;
   },
 
+  //Interpret the state as a bitmask
   _convertToBitstring: function(number) {
     return Array.from(new Array(this.states),(x,i) => ((1<<i)&this.number)>0);
   },

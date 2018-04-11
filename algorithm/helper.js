@@ -1,3 +1,7 @@
+/**
+* Helper Function
+* Removes an entry from a staircase (row & column)
+*/
 exports.stairSplice = function(stair, index) {
   let size = stair[0].length+1;
   for (var i = 0; i < size; i++) {
@@ -12,6 +16,9 @@ exports.stairSplice = function(stair, index) {
   return stair;
 }
 
+/**
+* Transforms a staircase back to the full majority matrix
+*/
 exports.getFullMargins = function(stair) {
   size = stair[0].length+1;
 
@@ -32,6 +39,9 @@ exports.getFullMargins = function(stair) {
   return out;
 }
 
+/**
+* Transfomrs a set of winning candidates into a list of degenerated lotteries
+*/
 exports.getWinnerLotteries = function getWinnerLotteries(winners,size) {
   if(typeof winners == "number") {
     return getWinnerLotteries([winners],size)

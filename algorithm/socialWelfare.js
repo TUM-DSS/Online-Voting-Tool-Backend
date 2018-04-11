@@ -2,6 +2,13 @@ const helper = require('./helper');
 const types = require('./answerTypes');
 const socialChoice  = require('./socialChoice');
 
+/**
+* Compute the social welfare functions
+*/
+
+/**
+* Find the Ranked Pair Profile of a given data object by repeated calls to tideman.
+*/
 exports.rankedPairs = function rankedPairs(data) {
   let size = data.staircase[0].length + 1;
   let index = Array.from(new Array(size), (x,i) => i);
@@ -25,10 +32,13 @@ exports.rankedPairs = function rankedPairs(data) {
   }
 }
 
+/**
+* Find the Kemeny Profile of a given data object
+*/
 exports.kemeny = function kemeny(data) {
   let size = data.staircase[0].length+1;
 
-  //Abort Search after 3 Seconds
+  //Abort Search after 10 Seconds
   let abortTime = (+new Date()) + 10000;
 
   let permutations = exports._getPermutations(size,abortTime);
@@ -57,6 +67,9 @@ exports.kemeny = function kemeny(data) {
   }
 }
 
+/**
+* Helper function: Computes the Kemeny Score of a given profile, given the staircase
+*/
 exports._getKemenyScore = function getKemenyScore(profile,stair) {
   let score = 0;
   for (var i = 0; i < profile.length; i++) {
@@ -76,6 +89,10 @@ exports._getKemenyScore = function getKemenyScore(profile,stair) {
   return score;
 }
 
+/**
+* Enumerates all possible permutations on n objects
+* can timeout
+*/
 exports._getPermutations = function getPermutations(size, abortTime) {
   let data = Array.from(new Array(size), (x,i) => i);
 
@@ -101,11 +118,15 @@ exports._getPermutations = function getPermutations(size, abortTime) {
   return result;
 }
 
+/**
+* Find the Schulze Profile of a given data object
+*/
 exports.schulze = function schulze(data) {
   stair = data.staircase;
   power = helper.getFullMargins(stair).map(arr => arr.map(x => x>0?x:0));
   size = power.length;
 
+  //Use Floyd-Warshall for graph search
   for (var i = 0; i < size; i++) {
     for (var j = 0; j < size; j++) {
       if(i != j) {
@@ -117,6 +138,8 @@ exports.schulze = function schulze(data) {
       }
     }
   }
+
+  //Compute the schulze majority margins
   for (var i = 0; i < size; i++) {
     for (var j = i+1; j < size; j++) {
       let si = i;
@@ -140,12 +163,16 @@ exports.schulze = function schulze(data) {
   };
 }
 
+/**
+* Extract the Schulze Preference Profile from its majority margin
+*/
 exports._schulzeProfileExtract = function (stair) {
   let margin = helper.getFullMargins(stair);
   let index = Array.from(new Array(size), (x,i) => i);
   let profile = [];
 
   while(index.length > 0) {
+    //Iteretively get the best option, remove it from the stair and add it to the profile
     score = margin.map(arr => arr.reduce((acc,val)=> acc+(val>0?1:0)));
     max = margin.reduce((iMax, x, i, arr) => x > arr[iMax] ? i : iMax, 0);
 

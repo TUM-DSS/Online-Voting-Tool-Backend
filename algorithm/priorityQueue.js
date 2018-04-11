@@ -1,3 +1,4 @@
+//Implementation of a heapbased priority queue 
 //Source: https://stackoverflow.com/questions/42919469/efficient-way-to-implement-priority-queue-in-javascript
 const top = 0;
 const parent = i => ((i + 1) >>> 1) - 1;

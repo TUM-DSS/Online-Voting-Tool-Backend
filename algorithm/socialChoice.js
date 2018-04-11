@@ -2,6 +2,13 @@ const helper = require('./helper');
 const types = require('./answerTypes');
 const priorityQueue = require('./priorityQueue');
 
+/**
+* Computes the social choice function (except essentialSet)
+*/
+
+/**
+* Compute the borda winner of a given data object
+*/
 exports.borda = function borda(data) {
   let voteSize = data.staircase.length+1;
   let score = new Array(voteSize).fill(0);
@@ -20,8 +27,9 @@ exports.borda = function borda(data) {
       }
     }
   }
-
+  //Find highest Borda Score
   let winScore = Math.max(...score);
+  //Get all candidates with highest score
   let winner = score.reduce((p,c,i,a) => c ==  winScore ? p.concat(i) : p,[]);
   lotteries = helper.getWinnerLotteries(winner,voteSize);
 
@@ -32,11 +40,16 @@ exports.borda = function borda(data) {
   }
 }
 
+/**
+* Compute the minimax winner of a given data object
+*/
 exports.minimax = function minimax(data) {
   marg = helper.getFullMargins(data.staircase);
+  //Compute min of each row
   mini = marg.map(arr => Math.min(...arr))
-
+  //Get the max of the mins
   let winScore = Math.max(...mini);
+  //find all rows with maximal mincolumn
   let winner = mini.reduce((p,c,i,a) => c ==  winScore ? p.concat(i) : p,[]);
   let lotteries = helper.getWinnerLotteries(winner,marg.length);
 
@@ -47,13 +60,18 @@ exports.minimax = function minimax(data) {
   }
 }
 
+/**
+* Compute the nanson winner of a given data object
+*/
 exports.nanson = function nanson(data) {
   let marg = helper.getFullMargins(data.staircase);
   let size = marg.length;
   let index = Array.from(new Array(size), (x,i) => i);
 
   do {
+    //Get the borda score (= sum of each row)
     score = marg.map(array => array.reduce((acc,val,i) => acc+val));
+    //Find and remove all negative score candidates
     negativeScoreIndices = index.filter( (e,i) => score[i]<0);
     marg = marg.filter((arr,i) => score[i]>=0);
     marg = marg.map(arr => arr.filter((e,i) => score[i]>=0));
@@ -69,11 +87,16 @@ exports.nanson = function nanson(data) {
   }
 }
 
+/**
+* Compute the black winner of a given data object
+*/
 exports.black = function black(data) {
   margin = helper.getFullMargins(data.staircase);
+  //Check if there is a candidate strictly preferred by everyone
+  //Remove the diagonal of the matrix and look for positive rows
   margin.forEach( (arr,i) => {arr.splice(i,1);return arr});
   condocet = margin.findIndex( arr => arr.every(e => e>0));
-
+  //if there is one return it
   if(condocet>=0) {
     return {
       success: true,
@@ -85,10 +108,16 @@ exports.black = function black(data) {
   return exports.borda(data);
 }
 
+/**
+* Compute the tideman winner of a given data object
+*/
 exports.tideman = function tideman(data) {
+  //Setup a priority queue
   let queue = new priorityQueue( (a,b) => a.weight > b.weight);
   let stair = data.staircase;
   let size = stair[0].length + 1;
+
+  //Buildup weighted Graph
   for (var i = 0; i < stair.length; i++) {
     for (var j = 0; j < stair[i].length; j++) {
       let weight,from,to;
@@ -114,6 +143,7 @@ exports.tideman = function tideman(data) {
 
   let domID,subID = 0
 
+  //Graph Search
   while(!queue.isEmpty()) {
     let edge = queue.pop();
     //Find maximum -> (dom,sub)
@@ -159,12 +189,18 @@ exports.tideman = function tideman(data) {
   }
 }
 
+/**
+* Graph helper functions
+*/
+
+//Weighted Edge objects
 exports._Edge = function Edge(from,to,weight) {
   this.from = from;
   this.to = to;
   this.weight = weight;
 }
 
+//Node objects storeing stronger and weaker nodes
 exports._Node = function Node(graphSize,graph) {
   this.size = graphSize;
   this.graph = graph;
@@ -180,16 +216,25 @@ exports._Node.prototype.isStrongerThan = function (x) {
   return this.strongerThan.has(x);
 };
 
+/**
+* Add a set of nodes recursively to everyone this nodes dominates
+*/
 exports._Node.prototype.dominate = function (set) {
   this.strongerThan = this.strongerThan.union(set);
   this.weakerThan.forEach(x => this.graph[x].dominate(set));
 };
 
+/**
+* Add a set of nodes recursively to everyone this nodes is dominated by
+*/
 exports._Node.prototype.submitTo = function (set) {
   this.weakerThan = this.weakerThan.union(set);
   this.strongerThan.forEach(x => this.graph[x].submitTo(set));
 };
 
+/**
+* Extend the javascript Set object by a union function
+*/
 Set.prototype.union = function(setB) {
     var union = new Set(this);
     for (var elem of setB) {
