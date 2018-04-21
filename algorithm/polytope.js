@@ -13,18 +13,6 @@ const feasibilityCounter = require('./feasibilityCounter');
 */
 exports.maxLottery = function maxLottery(data) {
   let size = data.staircase[0].length+1;
-  if(data.staircase.every( array => array.every(entry => entry == 0))) {
-
-    let res = Array.from(new Array(size), (x,i)=> {
-      return Array.from(new Array(size), (y,j) => i==j?1:0)
-    });
-
-    return {
-      success: true,
-      type: types.Lotteries,
-      result:res
-    }
-  }
 
   let model = exports._getMaxLotteryLP(data);
 
@@ -105,8 +93,53 @@ exports.essentialSet = function essentialSet(data) {
 * Get the maximal lottery LP for a given staircase
 */
 exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
-  marg = helper.getFullMargins(data.staircase);
-  size = marg[0].length;
+  var marg = helper.getFullMargins(data.staircase);
+  var size = marg[0].length;
+
+  //Reduce Magins
+  for(var i = 0; i < marg.length; i++) {
+    //If Zero Row
+    //Remove and continue
+    if(marg[i].every(x => x==0)) {
+      marg.splice(i,1);
+      i--;
+    }
+  }
+
+  for (var i = 0; i < marg.length; i++) {
+    for (var j = i+1; j < marg.length; j++) {
+      var multiple = true;
+      var fac = 0;
+      //Check if a*Marg[i] = Marg[j]
+      for(var k=0; k<size; k++) {
+        if(marg[i][k] == 0 && marg[j][k] == 0) {
+          continue;
+        }
+
+        if( (marg[i][k] != marg[j][k]) && (marg[j][k] == 0 || marg[i][k] == 0)) {
+          multiple = false;
+          break;
+        }
+
+        if(marg[i][k] != 0 && marg[j][k] != 0) {
+          var cFac = Math.round(marg[i][k]/marg[j][k]);
+          if(fac == 0) {
+            fac = cFac;
+          }
+
+          if(cFac != fac) {
+            multiple = false;
+            break;
+          }
+        }
+      }
+      //Remove j
+      if(multiple) {
+        marg.splice(j,1);
+        j--;
+      }
+    }
+  }
 
   //We use the unoptimized Minimax Strategy LP
   //maximize Value
@@ -122,14 +155,18 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
   constraintB += " = 1";
   model.push(constraintB);
 
+  if(marg.length === 0) {
+    model.push("1 Value = 0");
+  }
+
   //The expreced payoff of the lottery must be at least as high as the value
-  for (var j = 0; j < size; j++) {
+  for (var i = 0; i < marg.length; i++) {
     let constraint = ""
-    for (var i = 0; i < size; i++) {
+    for (var j = 0; j < size; j++) {
       if(marg[i][j] == 0) {
         continue;
       }
-      constraint+= marg[i][j]+" "+exports._voteName(i)+" ";
+      constraint+= -marg[i][j]+" "+exports._voteName(j)+" ";
     }
 
     constraint += "-1 Value >= 0";

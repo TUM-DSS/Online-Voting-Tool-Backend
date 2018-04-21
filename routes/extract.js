@@ -25,7 +25,6 @@ module.exports.extract = extract;
 
 /**
 * Implementation of the staircase algorithm.
-*
 */
 function extract (staircase) {
   voteSize = staircase[0].length+1;
