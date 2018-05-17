@@ -26,7 +26,7 @@ app.use("/extract",extract);
 app.use("/vote",vote);
 app.use("/test",test);
 
-app.get("/", (req,res) => res.send("Invalid Endpoint"))
+app.get("/", (req,res) => res.send("Invalid Endpoint"));
 
 var server = app.listen(port, () => {
   console.log("Server runs on port "+port);
