@@ -109,8 +109,7 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
     }
 
     for (i = 0; i < marg.length; i++) {
-        for (j = 0; j < marg.length; j++) {
-            if (i !== j) {
+        for (j = i+1; j < marg.length; j++) {
                 let multiple = true;
                 let fac = 0;
                 //Check if cFac * Marg[i] = Marg[j] with cFac > 0
@@ -141,7 +140,6 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
                     marg.splice(j,1);
                     j--;
                 }
-            }
         }
     }
 
