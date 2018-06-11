@@ -15,7 +15,7 @@ exports.rankedPairs = function rankedPairs(data) {
   let ranking = [];
 
   while(index.length > 1) {
-    let dom = socialChoice.tideman(data).result[0].findIndex(x => x>0);
+    let dom = socialChoice.oldtideman(data).result[0].findIndex(x => x>0);
     ranking.push(index[dom]);
     index.splice(dom,1);
     data.staircase = helper.stairSplice(data.staircase,dom);

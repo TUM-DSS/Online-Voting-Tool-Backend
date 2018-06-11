@@ -30,7 +30,7 @@ exports.borda = function borda(data) {
   //Find highest Borda Score
   let winScore = Math.max(...score);
   //Get all candidates with highest score
-  let winner = score.reduce((p,c,i,a) => c ==  winScore ? p.concat(i) : p,[]);
+  let winner = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
   lotteries = helper.getWinnerLotteries(winner,voteSize);
 
   return {
@@ -39,6 +39,39 @@ exports.borda = function borda(data) {
     result: lotteries
   }
 }
+
+/**
+ * Compute the a Tideman result via score definition
+ */
+exports.tideman = function tideman(data) {
+    let voteSize = data.staircase.length+1;
+    let score = new Array(voteSize).fill(0);
+
+    for (let i = 0; i < voteSize; i++) {
+        for(let j = i+1; j < voteSize; j++) {
+
+            let weight = data.staircase[i][j-(i+1)];
+
+            if(weight > 0) {
+                score[j] += weight;
+            } else {
+                score[i] -= weight;
+            }
+        }
+    }
+
+    // Find lowest Score
+    let winScore = Math.min(...score);
+    // Get all candidates with lowest score
+    let winner = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+    let lotteries = helper.getWinnerLotteries(winner, voteSize);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+};
 
 /**
 * Compute the minimax winner of a given data object
@@ -111,7 +144,7 @@ exports.black = function black(data) {
 /**
 * Compute the tideman winner of a given data object
 */
-exports.tideman = function tideman(data) {
+exports.oldtideman = function oldtideman(data) {
   //Setup a priority queue
   let queue = new priorityQueue( (a,b) => a.weight > b.weight);
   let stair = data.staircase;
