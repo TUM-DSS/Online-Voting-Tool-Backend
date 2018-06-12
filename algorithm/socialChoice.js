@@ -142,9 +142,9 @@ exports.black = function black(data) {
 }
 
 /**
-* Compute the tideman winner of a given data object
+* Compute the ranked Pairs winner of a given data object
 */
-exports.oldtideman = function oldtideman(data) {
+exports.rankedPairsWinner = function rankedPairsWinner(data) {
   //Setup a priority queue
   let queue = new priorityQueue( (a,b) => a.weight > b.weight);
   let stair = data.staircase;
