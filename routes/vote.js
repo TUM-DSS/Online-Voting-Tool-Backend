@@ -14,11 +14,11 @@ router.post("",(req,res,next) => {
   }
 
   switch (req.body.algorithm.toLowerCase()) {
-    case "maximal lottery":
+    case "c2-maximal lottery":
       response = polytope.maxLottery(req.body);
       break;
 
-    case "homogeneous maximal lottery":
+    case "maximal lottery":
       response = polytope.homogeneousMaximalLottery(req.body);
       break;
 

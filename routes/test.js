@@ -1,4 +1,4 @@
-//Answer efficency querrys.
+//Answer efficiency queries.
 const express = require('express');
 const router = express.Router();
 const solver = require('javascript-lp-solver');
