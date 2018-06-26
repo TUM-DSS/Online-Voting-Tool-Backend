@@ -6,7 +6,7 @@ const socialWelfare = require('../algorithm/socialWelfare');
 const router = express.Router();
 
 router.post("",(req,res,next) => {
-    console.log("Incoming",req.body);
+    // console.log("Incoming",req.body);
 
     response = {
         success: false,
@@ -28,6 +28,14 @@ router.post("",(req,res,next) => {
 
         case "plurality":
             response = socialChoice.plurality(req.body);
+            break;
+
+        case "plurality with runoff":
+            response = socialChoice.pluralityWithRunoff(req.body);
+            break;
+
+        case "instant runoff":
+            response = socialChoice.instantRunoff(req.body);
             break;
 
         case "borda":
@@ -69,7 +77,7 @@ router.post("",(req,res,next) => {
             }
     }
 
-    console.log("Send Answer",response);
+    // console.log("Send Answer",response);
     res.send(response);
 });
 

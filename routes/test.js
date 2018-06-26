@@ -195,7 +195,7 @@ function _getStochsticDominanceLP(lottery,preferenceProfile) {
       model.push(constraint+" = "+value);
     }
   }
-  console.log(model);
+  // console.log(model);
 
   //q is a lottery
   let constraint = "";

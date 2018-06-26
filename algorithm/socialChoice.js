@@ -43,7 +43,7 @@ exports.borda = function borda(data) {
 /**
  * Compute the plurality winner of a given data object
  */
-exports.plurality = function borda(data) {
+exports.plurality = function plurality(data) {
     let alternatives = data.staircase.length+1;
     let score = new Array(alternatives).fill(0);
 
@@ -62,6 +62,144 @@ exports.plurality = function borda(data) {
         result: lotteries
     }
 };
+
+/**
+ * Compute the plurality with runoff winner of a given data object
+ */
+exports.pluralityWithRunoff = function pluralityWithRunoff(data) {
+    let alternatives = data.staircase.length+1;
+    let score = new Array(alternatives).fill(0);
+
+    let profile = data.profile;
+    for (let i = 0; i < profile.length; i++) {
+        score[profile[i].relation[0]] += profile[i].numberOfVoters;
+    }
+    //Find highest Plurality Score
+    let winScore = Math.max(...score);
+    let scoreCopyWithoutPluralityWinners = score.slice();
+    let scoreCopy = score.slice();
+
+    for (let i = 0; i < scoreCopyWithoutPluralityWinners.length; i++) {
+        if (scoreCopyWithoutPluralityWinners[i] === winScore) {
+            scoreCopyWithoutPluralityWinners[i] = -1;
+        }
+    }
+
+    let secondScore = Math.max(...scoreCopyWithoutPluralityWinners);
+    let pluralityWinners = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+    let secondWinners = scoreCopy.reduce((p,c,i,a) => c ===  secondScore ? p.concat(i) : p,[]);
+
+    let pluralityWithRunoffWinners = [];
+    if (pluralityWinners.length > 1) {
+        for (let i = 0; i < pluralityWinners.length; i++) {
+            for (let j = i+1; j < pluralityWinners.length; j++) {
+                let si = pluralityWinners[i];
+                let sj = pluralityWinners[j]-(pluralityWinners[i]+1);
+
+                if (data.staircase[si][sj] > 0 && !pluralityWithRunoffWinners.includes(pluralityWinners[i])) {
+                    pluralityWithRunoffWinners.push(pluralityWinners[i]);
+                }
+                if (data.staircase[si][sj] < 0 && !pluralityWithRunoffWinners.includes(pluralityWinners[j])) {
+                    pluralityWithRunoffWinners.push(pluralityWinners[j]);
+                }
+                if (data.staircase[si][sj] === 0) {
+                    if (!pluralityWithRunoffWinners.includes(pluralityWinners[i])) {
+                        pluralityWithRunoffWinners.push(pluralityWinners[i]);
+                    }
+                    if (!pluralityWithRunoffWinners.includes(pluralityWinners[j])) {
+                        pluralityWithRunoffWinners.push(pluralityWinners[j]);
+                    }
+                }
+            }
+        }
+    }
+    else {
+        pluralityWithRunoffWinners.push(pluralityWinners[0]);
+        let si = pluralityWinners[0];
+        for (let j = 0; j < secondWinners.length; j++) {
+            if (pluralityWinners[0] < secondWinners[j]) {
+                let sj = secondWinners[j]-(pluralityWinners[0]+1);
+                if (data.staircase[si][sj] <= 0) {
+                    pluralityWithRunoffWinners.push(secondWinners[j]);
+                }
+            }
+            else {
+                si = secondWinners[j];
+                let sj = pluralityWinners[0]-(secondWinners[j]+1);
+                if (data.staircase[si][sj] >= 0) {
+                    pluralityWithRunoffWinners.push(secondWinners[j]);
+                }
+            }
+
+        }
+    }
+
+    let lotteries = helper.getWinnerLotteries(pluralityWithRunoffWinners.sort(),alternatives);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+};
+
+/**
+ * Compute the instant runoff winner of a given data object
+ */
+exports.instantRunoff = function instantRunoff(data) {
+    let alternativeSize = data.staircase.length+1;
+
+    let profile = data.profile;
+    let winners = instantRunoffRecursion(profile,alternativeSize,[]);
+    let lottery = helper.getWinnerLotteries(winners.sort(),alternativeSize);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lottery
+    }
+};
+
+function instantRunoffRecursion(profile, alternativeSize, excluded) {
+    // If only one non-excluded alternative remains, it shall be returned and thus be among the winners
+    if (excluded.length + 1 === alternativeSize) {
+        for (let i = 0; i < alternativeSize; i++) {
+            if (!excluded.includes(i)) {
+                return [i];
+            }
+        }
+    }
+
+    // Initialize the array with zeros
+    let score = new Array(alternativeSize).fill(0);
+
+    // Fill the array with the largest possible number for all excluded alternatives, so the (already) excluded alternatives do not lose again
+    for (let i = 0; i < score.length; i++) {
+        if (excluded.includes(i)) {
+            score[i] = Number.MAX_SAFE_INTEGER;
+        }
+    }
+
+    for (let i = 0; i < profile.length; i++) {
+        let counter = 0;
+        while (excluded.includes(profile[i].relation[counter])) {
+            counter++;
+        }
+        score[profile[i].relation[counter]] += profile[i].numberOfVoters;
+    }
+    // Find the lowest Plurality Score (among the non-excluded alternatives)
+    let lowestScore = Math.min(...score);
+    let losers = score.reduce((p,c,i,a) => c ===  lowestScore ? p.concat(i) : p,[]);
+
+    let returnWinners = [];
+
+    // Recursively call Instant Runoff with all possible losers and concatenate the results
+    for (let i = 0; i < losers.length; i++) {
+        returnWinners = Array.from(new Set(returnWinners.concat(instantRunoffRecursion(profile, alternativeSize, excluded.concat(losers[i])))));
+    }
+
+    return returnWinners;
+}
 
 /**
  * Compute the a Tideman result via score definition
@@ -144,6 +282,11 @@ exports.nanson = function nanson(data) {
 }
 
 /**
+ * Compute the Baldwin winner of a given data object
+ */
+// Recursion necessary to "catch" all possible ties
+
+/**
  * Compute the black winner of a given data object
  */
 exports.black = function black(data) {
@@ -151,13 +294,13 @@ exports.black = function black(data) {
     //Check if there is a candidate strictly preferred by everyone
     //Remove the diagonal of the matrix and look for positive rows
     margin.forEach( (arr,i) => {arr.splice(i,1);return arr});
-    condocet = margin.findIndex( arr => arr.every(e => e>0));
+    condorcet = margin.findIndex(arr => arr.every(e => e>0));
     //if there is one return it
-    if(condocet>=0) {
+    if(condorcet>=0) {
         return {
             success: true,
             type: types.Lotteries,
-            result: helper.getWinnerLotteries([condocet],margin.length)
+            result: helper.getWinnerLotteries([condorcet],margin.length)
         }
     }
 
