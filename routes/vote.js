@@ -50,6 +50,10 @@ router.post("",(req,res,next) => {
             response = socialChoice.nanson(req.body);
             break;
 
+        case "baldwin":
+            response = socialChoice.baldwin(req.body);
+            break;
+
         case "black":
             response = socialChoice.black(req.body);
             break;
@@ -57,6 +61,14 @@ router.post("",(req,res,next) => {
         case "tideman":
             response = socialChoice.tideman(req.body);
             break;
+
+        case "copeland":
+            response = socialChoice.copeland(req.body);
+            break;
+
+        // case "top cycle":
+        //     response = socialChoice.topCycle(req.body);
+        //     break;
 
         case "kemeny":
             response = socialWelfare.kemeny(req.body);

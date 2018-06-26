@@ -90,51 +90,37 @@ exports.pluralityWithRunoff = function pluralityWithRunoff(data) {
     let secondWinners = scoreCopy.reduce((p,c,i,a) => c ===  secondScore ? p.concat(i) : p,[]);
 
     let pluralityWithRunoffWinners = [];
+    // Case with several plurality winners
     if (pluralityWinners.length > 1) {
         for (let i = 0; i < pluralityWinners.length; i++) {
             for (let j = i+1; j < pluralityWinners.length; j++) {
                 let si = pluralityWinners[i];
                 let sj = pluralityWinners[j]-(pluralityWinners[i]+1);
 
-                if (data.staircase[si][sj] > 0 && !pluralityWithRunoffWinners.includes(pluralityWinners[i])) {
+                if (data.staircase[si][sj] >= 0) {
                     pluralityWithRunoffWinners.push(pluralityWinners[i]);
                 }
-                if (data.staircase[si][sj] < 0 && !pluralityWithRunoffWinners.includes(pluralityWinners[j])) {
+                if (data.staircase[si][sj] <= 0) {
                     pluralityWithRunoffWinners.push(pluralityWinners[j]);
                 }
-                if (data.staircase[si][sj] === 0) {
-                    if (!pluralityWithRunoffWinners.includes(pluralityWinners[i])) {
-                        pluralityWithRunoffWinners.push(pluralityWinners[i]);
-                    }
-                    if (!pluralityWithRunoffWinners.includes(pluralityWinners[j])) {
-                        pluralityWithRunoffWinners.push(pluralityWinners[j]);
-                    }
-                }
             }
         }
     }
-    else {
-        pluralityWithRunoffWinners.push(pluralityWinners[0]);
+    else { // Case with unique plurality winner
+        let margins = helper.getFullMargins(data.staircase);
         let si = pluralityWinners[0];
         for (let j = 0; j < secondWinners.length; j++) {
-            if (pluralityWinners[0] < secondWinners[j]) {
-                let sj = secondWinners[j]-(pluralityWinners[0]+1);
-                if (data.staircase[si][sj] <= 0) {
-                    pluralityWithRunoffWinners.push(secondWinners[j]);
-                }
+            let sj = secondWinners[j];
+            if (margins[si][sj] <= 0) {
+                pluralityWithRunoffWinners.push(sj);
             }
-            else {
-                si = secondWinners[j];
-                let sj = pluralityWinners[0]-(secondWinners[j]+1);
-                if (data.staircase[si][sj] >= 0) {
-                    pluralityWithRunoffWinners.push(secondWinners[j]);
-                }
+            if (margins[si][sj] >= 0) {
+                pluralityWithRunoffWinners.push(si);
             }
-
         }
     }
 
-    let lotteries = helper.getWinnerLotteries(pluralityWithRunoffWinners.sort(),alternatives);
+    let lotteries = helper.getWinnerLotteries(Array.from(new Set(pluralityWithRunoffWinners)).sort(),alternatives);
 
     return {
         success: true,
@@ -191,14 +177,23 @@ function instantRunoffRecursion(profile, alternativeSize, excluded) {
     let lowestScore = Math.min(...score);
     let losers = score.reduce((p,c,i,a) => c ===  lowestScore ? p.concat(i) : p,[]);
 
-    let returnWinners = [];
 
+
+    // Thorough tie-breaking (corresponding to computational hard problem)
     // Recursively call Instant Runoff with all possible losers and concatenate the results
-    for (let i = 0; i < losers.length; i++) {
-        returnWinners = Array.from(new Set(returnWinners.concat(instantRunoffRecursion(profile, alternativeSize, excluded.concat(losers[i])))));
-    }
+    // let returnWinners = [];
+    // for (let i = 0; i < losers.length; i++) {
+    //     returnWinners = Array.from(new Set(returnWinners.concat(instantRunoffRecursion(profile, alternativeSize, excluded.concat(losers[i])))));
+    // }
+    // return returnWinners;
 
-    return returnWinners;
+    // Fixed Tie-Breaking: Removing all plurality losers at once
+    if (losers.length === alternativeSize - excluded.length) {
+        return losers;
+    }
+    else {
+        return instantRunoffRecursion(profile, alternativeSize, excluded.concat(losers));
+    }
 }
 
 /**
@@ -255,6 +250,66 @@ exports.minimax = function minimax(data) {
 }
 
 /**
+ * Compute the copeland winner of a given data object
+ */
+exports.copeland = function copeland(data) {
+    let margin = helper.getFullMargins(data.staircase);
+    let lottery = helper.getWinnerLotteries(copelandAsSet(margin),margin.length);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lottery
+    }
+};
+
+function copelandAsSet(margin) {
+    let alternativesSize = margin.length;
+    let copelandScore = new Array(alternativesSize).fill(0);
+
+    for (let i = 0; i < alternativesSize; i++) {
+        for (let j = 0; j < alternativesSize; j++) {
+            copelandScore[i] += (margin[i][j] > 0 ? 1 : -1);
+        }
+    }
+
+    //Get the maximal Copeland score
+    let winScore = Math.max(...copelandScore);
+    //find all alternatives with maximal Copeland score
+    return copelandScore.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+}
+
+/**
+ * Compute the top cycle of a given data object
+ */
+// exports.topCycle = function topCycle(data) {
+//     let margin = helper.getFullMargins(data.staircase);
+//     let alternativesSize = margin.length;
+//
+//     let copelandWinners = copelandAsSet(margin);
+//
+//     let dominators = [];
+//
+//     for (let i = 0; i < alternativesSize; i++) {
+//         if (margin[][]) {
+//
+//         }
+//     }
+//
+//
+//     do {
+//
+//     } while () ;
+//     let lottery = helper.getWinnerLotteries(winner,alternativesSize);
+//
+//     return {
+//         success: true,
+//         type: types.Lotteries,
+//         result: lottery
+//     }
+// };
+
+/**
  * Compute the nanson winner of a given data object
  */
 exports.nanson = function nanson(data) {
@@ -284,7 +339,36 @@ exports.nanson = function nanson(data) {
 /**
  * Compute the Baldwin winner of a given data object
  */
-// Recursion necessary to "catch" all possible ties
+exports.baldwin = function baldwin(data) {
+    let marg = helper.getFullMargins(data.staircase);
+    let size = marg.length;
+    let index = Array.from(new Array(size), (x,i) => i);
+    let lowestScoreIndices;
+
+    do {
+        //Get the borda score (= sum of each row)
+        let score = marg.map(array => array.reduce((acc,val,i) => acc+val));
+        //Find and remove all candidates with lowest score
+        let lowestScore = Math.min(...score);
+        if (lowestScore !== 0)  {
+            lowestScoreIndices = index.filter( (e,i) => score[i] === lowestScore);
+            marg = marg.filter((arr,i) => score[i] > lowestScore);
+            marg = marg.map(arr => arr.filter((e,i) => score[i] > lowestScore));
+            index = index.filter((e,i) => score[i] > lowestScore);
+        }
+        else {
+            break;
+        }
+    } while(lowestScoreIndices.length > 0);
+
+    let lotteries = helper.getWinnerLotteries(index,size);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+}
 
 /**
  * Compute the black winner of a given data object
