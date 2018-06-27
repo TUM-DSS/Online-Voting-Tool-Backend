@@ -55,10 +55,46 @@ exports.homogeneousMaximalLottery = function homogeneousMaximalLottery(data) {
 };
 
 /**
- * Computes the essential set by computing the maximal lottery polytope an listing all candidates
+ * Computes the essential set by computing the C2-maximal lottery polytope and listing all candidates
  * with positive support
  */
 exports.essentialSet = function essentialSet(data) {
+    let res = exports.maxLottery(data);
+    if(!res.success) {
+        return res
+    }
+
+    let size = data.staircase[0].length+1;
+    let support = Array.from(new Array(size),x => false);
+    support = res.result.reduce( (sup,val) => {
+        for (let i = 0; i < val.length; i++) {
+            if(val[i]>0) {
+                sup[i] = true;
+            }
+        }
+        return sup
+    },support);
+
+    let lotteries = [];
+    for (let i = 0; i < support.length; i++) {
+        if(support[i]) {
+            lotteries.push(Array.from(new Array(size), (x,index) => index===i?1:0));
+        }
+    }
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+};
+
+/**
+ * Computes the bipartisan set by computing the C1-maximal lottery polytope and listing all candidates
+ * with positive support
+ */
+exports.bipartisanSet = function bipartisanSet(data) {
+    data.staircase = data.staircase.map(arr => arr.map(entry => exports._signedExponent(entry,0)));
     let res = exports.maxLottery(data);
     if(!res.success) {
         return res

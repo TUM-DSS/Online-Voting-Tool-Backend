@@ -26,6 +26,10 @@ router.post("",(req,res,next) => {
             response = polytope.essentialSet(req.body);
             break;
 
+        case "bipartisan set":
+            response = polytope.bipartisanSet(req.body);
+            break;
+
         case "plurality":
             response = socialChoice.plurality(req.body);
             break;
@@ -46,8 +50,8 @@ router.post("",(req,res,next) => {
             response = socialChoice.borda(req.body);
             break;
 
-        case "minimax":
-            response = socialChoice.minimax(req.body);
+        case "maximin":
+            response = socialChoice.maximin(req.body);
             break;
 
         case "nanson":

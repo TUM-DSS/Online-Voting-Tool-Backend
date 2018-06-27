@@ -253,9 +253,9 @@ exports.tideman = function tideman(data) {
 };
 
 /**
- * Compute the minimax winner of a given data object
+ * Compute the maximin winner of a given data object
  */
-exports.minimax = function minimax(data) {
+exports.maximin = function minimax(data) {
     marg = helper.getFullMargins(data.staircase);
     //Compute min of each row
     mini = marg.map(arr => Math.min(...arr))
