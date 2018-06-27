@@ -64,6 +64,29 @@ exports.plurality = function plurality(data) {
 };
 
 /**
+ * Compute the anti-plurality winner of a given data object
+ */
+exports.antiPlurality = function antiPlurality(data) {
+    let alternatives = data.staircase.length+1;
+    let score = new Array(alternatives).fill(0);
+
+    let profile = data.profile;
+    for (let i = 0; i < profile.length; i++) {
+        score[profile[i].relation[alternatives-1]] += profile[i].numberOfVoters;
+    }
+    //Find lowest anti-Plurality Score
+    let winScore = Math.min(...score);
+    let winner = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+    let lotteries = helper.getWinnerLotteries(winner,alternatives);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+};
+
+/**
  * Compute the plurality with runoff winner of a given data object
  */
 exports.pluralityWithRunoff = function pluralityWithRunoff(data) {
@@ -280,6 +303,51 @@ function copelandAsSet(margin) {
 }
 
 /**
+ * Compute the McKelvey uncovered set of a given data object
+ */
+exports.uncoveredSet = function uncoveredSet(data) {
+    let margin = helper.getFullMargins(data.staircase);
+    let alternativesSize = margin.length;
+    let kings = [];
+
+    // Check if x is a king
+    xLoop:
+    for (let x = 0; x < alternativesSize; x++) {
+
+
+        // Check if x reaches (every) y in at most two steps (of which at most one may be a tie)
+        yLoop:
+        for (let y = 0; y < alternativesSize; y++) {
+            if (x===y || margin[x][y] >= 0) {
+                continue;
+            }
+            else {
+                // Check if there is an alternative z as intermediate step
+                for (let z = 0; z < alternativesSize; z++) {
+                    if (x === z || y === z) {
+                        continue;
+                    }
+                    if ((margin[x][z] > 0 && margin[z][y] >= 0) || (margin[x][z] >= 0 && margin[z][y] > 0)) {
+                        continue yLoop;
+                    }
+                }
+            }
+            continue xLoop;
+        }
+        kings.push(x);
+    }
+
+
+    let lottery = helper.getWinnerLotteries(kings,margin.length);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lottery
+    }
+};
+
+/**
  * Compute the top cycle of a given data object
  */
 // exports.topCycle = function topCycle(data) {
@@ -374,11 +442,11 @@ exports.baldwin = function baldwin(data) {
  * Compute the black winner of a given data object
  */
 exports.black = function black(data) {
-    margin = helper.getFullMargins(data.staircase);
+    let margin = helper.getFullMargins(data.staircase);
     //Check if there is a candidate strictly preferred by everyone
     //Remove the diagonal of the matrix and look for positive rows
     margin.forEach( (arr,i) => {arr.splice(i,1);return arr});
-    condorcet = margin.findIndex(arr => arr.every(e => e>0));
+    let condorcet = margin.findIndex(arr => arr.every(e => e>0));
     //if there is one return it
     if(condorcet>=0) {
         return {
@@ -390,6 +458,77 @@ exports.black = function black(data) {
 
     return exports.borda(data);
 }
+
+/**
+ * Compute the Condorcet winner of a given data object (or all alternatives if there is none)
+ */
+exports.condorcet = function condorcet(data) {
+    let margin = helper.getFullMargins(data.staircase);
+    //Check if there is a candidate strictly preferred by everyone
+    //Remove the diagonal of the matrix and look for positive rows
+    margin.forEach( (arr,i) => {arr.splice(i,1);return arr});
+    let condorcet = margin.findIndex(arr => arr.every(e => e>0));
+    let weakCondorcet = margin.findIndex(arr => arr.every(e => e>=0));
+    let winners = [];
+    //if there is one return it
+    if(condorcet>=0) {
+        winners.push(condorcet);
+    }
+    else if (weakCondorcet >= 0) {
+        xLoop:
+        for (let x = 0; x < margin.length; x++) {
+            for (let y = 0; y < margin.length; y++) {
+                if (margin[x][y] < 0) {
+                    continue xLoop;
+                }
+            }
+            winners.push(x);
+        }
+    }
+    else {
+        for (let x = 0; x < margin.length; x++) {
+            winners.push(x);
+        }
+    }
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: helper.getWinnerLotteries(winners,margin.length)
+    }
+};
+
+/**
+ * Compute the Pareto-undominated alternatives
+ */
+exports.pareto = function pareto(data) {
+    let margin = helper.getFullMargins(data.staircase);
+
+    // Compute total number of voters
+    let numberOfVoters = 0;
+    for (let i = 0; i < data.profile.length; i++) {
+        numberOfVoters += data.profile[i].numberOfVoters;
+    }
+
+    let winners = [];
+
+    // Check for Pareto domination
+    xLoop:
+    for (let x = 0; x < margin.length; x++) {
+        for (let y = 0; y < margin.length; y++) {
+            if (margin[y][x] === numberOfVoters) {
+                continue xLoop;
+            }
+        }
+        winners.push(x);
+    }
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: helper.getWinnerLotteries(winners,margin.length)
+    }
+};
 
 /**
  * Compute the ranked Pairs winner of a given data object

@@ -38,6 +38,10 @@ router.post("",(req,res,next) => {
             response = socialChoice.instantRunoff(req.body);
             break;
 
+        case "anti-plurality":
+            response = socialChoice.antiPlurality(req.body);
+            break;
+
         case "borda":
             response = socialChoice.borda(req.body);
             break;
@@ -62,6 +66,14 @@ router.post("",(req,res,next) => {
             response = socialChoice.tideman(req.body);
             break;
 
+        case "condorcet":
+            response = socialChoice.condorcet(req.body);
+            break;
+
+        case "pareto":
+            response = socialChoice.pareto(req.body);
+            break;
+
         case "copeland":
             response = socialChoice.copeland(req.body);
             break;
@@ -69,6 +81,10 @@ router.post("",(req,res,next) => {
         // case "top cycle":
         //     response = socialChoice.topCycle(req.body);
         //     break;
+
+        case "uncovered set":
+            response = socialChoice.uncoveredSet(req.body);
+            break;
 
         case "kemeny":
             response = socialWelfare.kemeny(req.body);
