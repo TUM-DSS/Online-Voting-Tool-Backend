@@ -64,6 +64,44 @@ exports.plurality = function plurality(data) {
 };
 
 /**
+ * Compute the Bucklin winners of a given data object
+ */
+exports.bucklin = function bucklin(data) {
+    let alternatives = data.staircase.length+1;
+
+    // Compute total number of voters
+    let numberOfVoters = 0;
+    for (let i = 0; i < data.profile.length; i++) {
+        numberOfVoters += data.profile[i].numberOfVoters;
+    }
+    let majority = numberOfVoters / 2.0;
+
+    let score = new Array(alternatives).fill(0);
+    let profile = data.profile;
+    let winScore;
+
+    for (let a = 0; a < alternatives; a++) {
+        for (let i = 0; i < profile.length; i++) {
+            score[profile[i].relation[a]] += profile[i].numberOfVoters;
+        }
+        //Find highest (a+1)-Bucklin Score
+        winScore = Math.max(...score);
+        if(winScore > majority) {
+            break;
+        }
+    }
+
+    let winner = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+    let lotteries = helper.getWinnerLotteries(winner,alternatives);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lotteries
+    }
+};
+
+/**
  * Compute the anti-plurality winner of a given data object
  */
 exports.antiPlurality = function antiPlurality(data) {
@@ -486,9 +524,10 @@ exports.condorcet = function condorcet(data) {
         }
     }
     else {
-        for (let x = 0; x < margin.length; x++) {
-            winners.push(x);
-        }
+        // for (let x = 0; x < margin.length; x++) {
+        //     winners.push(x);
+        // }
+        winners.push(-1);
     }
 
     return {

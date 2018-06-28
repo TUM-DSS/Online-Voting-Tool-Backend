@@ -46,6 +46,10 @@ router.post("",(req,res,next) => {
             response = socialChoice.antiPlurality(req.body);
             break;
 
+        case "bucklin":
+            response = socialChoice.bucklin(req.body);
+            break;
+
         case "borda":
             response = socialChoice.borda(req.body);
             break;
