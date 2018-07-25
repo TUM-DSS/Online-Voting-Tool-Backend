@@ -36,6 +36,7 @@ exports.borda = function borda(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Scores: "+score,
         result: lotteries
     }
 };
@@ -59,6 +60,7 @@ exports.plurality = function plurality(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Scores: "+score,
         result: lotteries
     }
 };
@@ -79,11 +81,13 @@ exports.bucklin = function bucklin(data) {
     let score = new Array(alternatives).fill(0);
     let profile = data.profile;
     let winScore;
+    let tooltip = "";
 
     for (let a = 0; a < alternatives; a++) {
         for (let i = 0; i < profile.length; i++) {
             score[profile[i].relation[a]] += profile[i].numberOfVoters;
         }
+        tooltip += "Round " + (a+1) + ": " + score + '\n';
         //Find highest (a+1)-Bucklin Score
         winScore = Math.max(...score);
         if(winScore > majority) {
@@ -97,6 +101,7 @@ exports.bucklin = function bucklin(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: tooltip,
         result: lotteries
     }
 };
@@ -120,6 +125,7 @@ exports.antiPlurality = function antiPlurality(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Veto Scores: "+score,
         result: lotteries
     }
 };
@@ -186,6 +192,7 @@ exports.pluralityWithRunoff = function pluralityWithRunoff(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Scores: "+score,
         result: lotteries
     }
 };
@@ -258,6 +265,103 @@ function instantRunoffRecursion(profile, alternativeSize, excluded) {
 }
 
 /**
+ * Compute the coombs winner of a given data object
+ */
+exports.coombs = function coombs(data) {
+    let alternativeSize = data.staircase.length+1;
+
+    let profile = data.profile;
+    let winners = coombsRecursion(profile,alternativeSize,[]);
+    let lottery = helper.getWinnerLotteries(winners.sort(),alternativeSize);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: lottery
+    }
+};
+
+function coombsRecursion(profile, alternativeSize, excluded) {
+    // If only one non-excluded alternative remains, it shall be returned and thus be among the winners
+    if (excluded.length + 1 === alternativeSize) {
+        for (let i = 0; i < alternativeSize; i++) {
+            if (!excluded.includes(i)) {
+                return [i];
+            }
+        }
+    }
+
+    // Initialize the plurality score array with zeros
+    let pluralityScore = new Array(alternativeSize).fill(0);
+
+    // Initialize the veto (= last ranked alternatives) score array with zeros
+    let vetoScore = new Array(alternativeSize).fill(0);
+
+    // Fill the plurality score array with the smallest possible number for all excluded alternatives
+    for (let i = 0; i < pluralityScore.length; i++) {
+        if (excluded.includes(i)) {
+            pluralityScore[i] = Number.MIN_SAFE_INTEGER;
+        }
+    }
+
+    // Fill the veto score array with the smallest possible number for all excluded alternatives
+    for (let i = 0; i < vetoScore.length; i++) {
+        if (excluded.includes(i)) {
+            vetoScore[i] = Number.MIN_SAFE_INTEGER;
+        }
+    }
+
+    let sumOfVoters = 0;
+    // Compute plurality scores (ignoring excluded alternatives)
+    for (let i = 0; i < profile.length; i++) {
+        let counter = 0;
+        while (excluded.includes(profile[i].relation[counter])) {
+            counter++;
+        }
+        pluralityScore[profile[i].relation[counter]] += profile[i].numberOfVoters;
+        sumOfVoters += profile[i].numberOfVoters;
+    }
+
+    // Compute veto scores (ignoring excluded alternatives)
+    for (let i = 0; i < profile.length; i++) {
+        let counter = alternativeSize - 1;
+        while (excluded.includes(profile[i].relation[counter])) {
+            counter--;
+        }
+        vetoScore[profile[i].relation[counter]] += profile[i].numberOfVoters;
+    }
+
+
+    // Find the highest Plurality Score (among the non-excluded alternatives)
+    let highestPluralityScore = Math.max(...pluralityScore);
+    // If there is a majority, return the majority winner
+    if (highestPluralityScore > sumOfVoters / 2.0) {
+        return pluralityScore.reduce((p, c, i, a) => c === highestPluralityScore ? p.concat(i) : p, []);
+    }
+    else {
+        // If there is no majority, compute the veto loser(s)
+        let highestVetoScore = Math.max(...vetoScore);
+        let losers = vetoScore.reduce((p, c, i, a) => c === highestVetoScore ? p.concat(i) : p, []);
+
+        // Thorough tie-breaking (corresponding to computational hard problem)
+        // Recursively call Coombs with all possible losers and concatenate the results
+        // let returnWinners = [];
+        // for (let i = 0; i < losers.length; i++) {
+        //     returnWinners = Array.from(new Set(returnWinners.concat(coombsRecursion(profile, alternativeSize, excluded.concat(losers[i])))));
+        // }
+        // return returnWinners;
+
+        // Fixed Tie-Breaking: Removing all veto losers at once
+        if (losers.length === alternativeSize - excluded.length) {
+            return losers;
+        }
+        else {
+            return coombsRecursion(profile, alternativeSize, excluded.concat(losers));
+        }
+    }
+}
+
+/**
  * Compute the a Tideman result via score definition
  */
 exports.tideman = function tideman(data) {
@@ -286,6 +390,7 @@ exports.tideman = function tideman(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Scores: " + score,
         result: lotteries
     }
 };
@@ -306,6 +411,7 @@ exports.maximin = function minimax(data) {
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: "Row minima: " + mini,
         result: lotteries
     }
 }
@@ -315,16 +421,7 @@ exports.maximin = function minimax(data) {
  */
 exports.copeland = function copeland(data) {
     let margin = helper.getFullMargins(data.staircase);
-    let lottery = helper.getWinnerLotteries(copelandAsSet(margin),margin.length);
 
-    return {
-        success: true,
-        type: types.Lotteries,
-        result: lottery
-    }
-};
-
-function copelandAsSet(margin) {
     let alternativesSize = margin.length;
     let copelandScore = new Array(alternativesSize).fill(0);
 
@@ -337,8 +434,17 @@ function copelandAsSet(margin) {
     //Get the maximal Copeland score
     let winScore = Math.max(...copelandScore);
     //find all alternatives with maximal Copeland score
-    return copelandScore.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
-}
+    let copelandSet = copelandScore.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
+
+    let lottery = helper.getWinnerLotteries(copelandSet,margin.length);
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        tooltip: "Scores: " + copelandScore,
+        result: lottery
+    }
+};
 
 /**
  * Compute the McKelvey uncovered set of a given data object
@@ -508,11 +614,14 @@ exports.condorcet = function condorcet(data) {
     let condorcet = margin.findIndex(arr => arr.every(e => e>0));
     let weakCondorcet = margin.findIndex(arr => arr.every(e => e>=0));
     let winners = [];
+    let tooltip;
     //if there is one return it
     if(condorcet>=0) {
         winners.push(condorcet);
+        tooltip = "Strict Condorcet winner!";
     }
     else if (weakCondorcet >= 0) {
+        tooltip = "Weak Condorcet winners!";
         xLoop:
         for (let x = 0; x < margin.length; x++) {
             for (let y = 0; y < margin.length; y++) {
@@ -528,11 +637,13 @@ exports.condorcet = function condorcet(data) {
         //     winners.push(x);
         // }
         winners.push(-1);
+        tooltip = "No (weak) Condorcet winner!";
     }
 
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: tooltip,
         result: helper.getWinnerLotteries(winners,margin.length)
     }
 };
@@ -550,21 +661,25 @@ exports.pareto = function pareto(data) {
     }
 
     let winners = [];
+    let tooltip = "Dominations: ";
 
     // Check for Pareto domination
     xLoop:
     for (let x = 0; x < margin.length; x++) {
         for (let y = 0; y < margin.length; y++) {
             if (margin[y][x] === numberOfVoters) {
+                tooltip += y + ", ";
                 continue xLoop;
             }
         }
         winners.push(x);
+        tooltip += "-, ";
     }
 
     return {
         success: true,
         type: types.Lotteries,
+        tooltip: tooltip,
         result: helper.getWinnerLotteries(winners,margin.length)
     }
 };

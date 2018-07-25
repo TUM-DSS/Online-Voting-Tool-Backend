@@ -50,6 +50,10 @@ router.post("",(req,res,next) => {
             response = socialChoice.bucklin(req.body);
             break;
 
+        case "coombs":
+            response = socialChoice.coombs(req.body);
+            break;
+
         case "borda":
             response = socialChoice.borda(req.body);
             break;
@@ -75,6 +79,7 @@ router.post("",(req,res,next) => {
             break;
 
         case "condorcet":
+        case "weak condorcet":
             response = socialChoice.condorcet(req.body);
             break;
 
