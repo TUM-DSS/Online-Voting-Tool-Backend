@@ -14,6 +14,7 @@ router.post("",(req,res,next) => {
     }
 
     switch (req.body.algorithm.toLowerCase()) {
+        // Social Decision Schemes
         case "c2-maximal lottery":
             response = polytope.maxLottery(req.body);
             break;
@@ -21,6 +22,16 @@ router.post("",(req,res,next) => {
         case "maximal lottery":
             response = polytope.homogeneousMaximalLottery(req.body);
             break;
+
+        case "random dictatorship":
+            response = polytope.randomDictatorship(req.body);
+            break;
+
+        case "proportional borda":
+            response = polytope.proportionalBorda(req.body);
+            break;
+
+        // Social Choice Functions
 
         case "essential set":
             response = polytope.essentialSet(req.body);
@@ -98,6 +109,8 @@ router.post("",(req,res,next) => {
         case "uncovered set":
             response = socialChoice.uncoveredSet(req.body);
             break;
+
+        // Social Welfare Functions
 
         case "kemeny":
             response = socialWelfare.kemeny(req.body);
