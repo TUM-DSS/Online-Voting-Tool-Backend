@@ -120,6 +120,10 @@ router.post("",(req,res,next) => {
             response = socialWelfare.kemenyILP(req.body);
             break;
 
+        case "kemeny winners":
+            response = socialWelfare.kemenyWinnersILP(req.body);
+            break;
+
         case "schulze":
             response = socialWelfare.schulze(req.body);
             break;

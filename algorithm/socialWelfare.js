@@ -68,13 +68,11 @@ exports.kemeny = function kemeny(data) {
     }
 };
 
-/**
- * Find the Kemeny Profile of a given data object (with ILP)
- */
-exports.kemenyILP = function kemenyILP(data) {
-    let size = data.staircase[0].length+1;
-    let margin = helper.getFullMargins(data.staircase);
+exports._getKemenyILP = function getKemenyILP(margin) {
+    return solver.ReformatLP(this._getStringKemenyILP(margin));
+};
 
+exports._getStringKemenyILP = function getStringKemenyILP(margin) {
     let model = ["max: Value"];
     let sum = "0.0";
     for (let i = 0; i < size; i++) {
@@ -102,8 +100,39 @@ exports.kemenyILP = function kemenyILP(data) {
 
     model.push(sum + " -1 Value = 0");
 
-    let reformattedModel = solver.ReformatLP(model);
-    let solution = solver.Solve(reformattedModel);
+    return model;
+};
+
+exports._getRankingFromMatrix = function getRankingFromMatrix(margin) {
+    let sortedAlready = [];
+    // Search for the respectively maximal element
+    let max = 0;
+    whileLoop:
+        while (sortedAlready.length < size) {
+            while (sortedAlready.includes(max)) {
+                max++;
+            }
+            for (let i = 0; i < size; i++) if (!sortedAlready.includes(i) && max !== i) {
+                if (margin[i][max] > 0) {
+                    max++;
+                    continue whileLoop;
+                }
+            }
+            sortedAlready.push(max);
+            max = 0;
+        }
+        return sortedAlready;
+};
+
+/**
+ * Find a Kemeny Ranking for a given data object (with ILP)
+ */
+exports.kemenyILP = function kemenyILP(data) {
+    let size = data.staircase[0].length+1;
+    let margin = helper.getFullMargins(data.staircase);
+
+    let model = this._getKemenyILP(margin);
+    let solution = solver.Solve(model);
 
     for (let i = 0; i < size; i++) {
         for (let j = 0; j < size; j++) if (i !== j) {
@@ -117,29 +146,85 @@ exports.kemenyILP = function kemenyILP(data) {
         }
     }
 
-    let sortedAlready = [];
-    // Search for the respectively maximal element
-    let max = 0;
-    whileLoop:
-    while (sortedAlready.length < size) {
-        while (sortedAlready.includes(max)) {
-            max++;
-        }
-        for (let i = 0; i < size; i++) if (!sortedAlready.includes(i) && max !== i) {
-            if (margin[i][max] > 0) {
-                max++;
-                continue whileLoop;
-            }
-        }
-        sortedAlready.push(max);
-        max = 0;
-    }
+    let ranking = this._getRankingFromMatrix(margin);
 
 
     return {
         success:true,
         type: types.Profile,
-        result: sortedAlready
+        result: ranking
+    }
+};
+
+/**
+ * Find the Kemeny winners for a given data object (with ILP)
+ */
+exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
+    let size = data.staircase[0].length+1;
+    let margin = helper.getFullMargins(data.staircase);
+    let winners = [];
+    let tooltip = [];
+
+        let model = this._getStringKemenyILP(margin);
+    let solution = solver.Solve(solver.ReformatLP(model));
+
+    let value = solution["Value"];
+
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) if (i !== j) {
+            let name = "d_" + i + "_" + j;
+            if (solution.hasOwnProperty(name)) {
+                margin[i][j] = solution[name];
+            }
+            else {
+                margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
+            }
+        }
+    }
+
+    let ranking = this._getRankingFromMatrix(margin);
+    tooltip.push(ranking);
+    let recentWinner = ranking[0];
+    winners.push(recentWinner);
+
+    // Iteratively check if there are more Kemeny winners
+    while (true) {
+        // Add constraints that the last winner does not win again
+        let constraint = "0";
+        for (let i = 0; i < size; i++) if (recentWinner !== i) {
+            constraint += " + d_" + i + "_" + recentWinner + " ";
+        }
+        model.push(constraint + " >= 1");
+
+        let solution = solver.Solve(solver.ReformatLP(model));
+        if (!solution["feasible"] || solution["Value"] < value) {
+            break;
+        }
+        else {
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) if (i !== j) {
+                    let name = "d_" + i + "_" + j;
+                    if (solution.hasOwnProperty(name)) {
+                        margin[i][j] = solution[name];
+                    }
+                    else {
+                        margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
+                    }
+                }
+            }
+            ranking = this._getRankingFromMatrix(margin);
+            tooltip.push(ranking);
+            recentWinner = ranking[0];
+            winners.push(recentWinner);
+        }
+    }
+
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        tooltip: tooltip,
+        result: helper.getWinnerLotteries(Array.from(new Set(winners)).sort(),margin.length)
     }
 };
 
