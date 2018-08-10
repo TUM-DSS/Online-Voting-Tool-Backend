@@ -103,26 +103,7 @@ exports._getStringKemenyILP = function getStringKemenyILP(margin) {
     return model;
 };
 
-exports._getRankingFromMatrix = function getRankingFromMatrix(margin) {
-    let sortedAlready = [];
-    // Search for the respectively maximal element
-    let max = 0;
-    whileLoop:
-        while (sortedAlready.length < size) {
-            while (sortedAlready.includes(max)) {
-                max++;
-            }
-            for (let i = 0; i < size; i++) if (!sortedAlready.includes(i) && max !== i) {
-                if (margin[i][max] > 0) {
-                    max++;
-                    continue whileLoop;
-                }
-            }
-            sortedAlready.push(max);
-            max = 0;
-        }
-        return sortedAlready;
-};
+
 
 /**
  * Find a Kemeny Ranking for a given data object (with ILP)
@@ -146,7 +127,7 @@ exports.kemenyILP = function kemenyILP(data) {
         }
     }
 
-    let ranking = this._getRankingFromMatrix(margin);
+    let ranking = helper.getRankingFromMatrix(margin);
 
 
     return {
@@ -182,7 +163,7 @@ exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
         }
     }
 
-    let ranking = this._getRankingFromMatrix(margin);
+    let ranking = helper.getRankingFromMatrix(margin);
     tooltip.push(ranking);
     let recentWinner = ranking[0];
     winners.push(recentWinner);
@@ -212,7 +193,7 @@ exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
                     }
                 }
             }
-            ranking = this._getRankingFromMatrix(margin);
+            ranking = helper.getRankingFromMatrix(margin);
             tooltip.push(ranking);
             recentWinner = ranking[0];
             winners.push(recentWinner);
