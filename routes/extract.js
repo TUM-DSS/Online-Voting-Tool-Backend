@@ -157,7 +157,7 @@ function extract (staircase) {
         backup.minimal = true;
         return backup;
     }
-    if (voterCount > n && n > 7) {
+    if (n > 7 || size > 6) {
         // We cannot yet stop the LP, so we do not try "large" instances at all for now
         // TODO: Remove this when we can stop the LP
         return backup;
