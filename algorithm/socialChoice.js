@@ -528,15 +528,18 @@ exports.nanson = function nanson(data) {
     let marg = helper.getFullMargins(data.staircase);
     let size = marg.length;
     let index = Array.from(new Array(size), (x,i) => i);
+    let backup = index;
 
     do {
         //Get the borda score (= sum of each row)
         score = marg.map(array => array.reduce((acc,val,i) => acc+val));
         //Find and remove all negative score candidates
         negativeScoreIndices = index.filter( (e,i) => score[i]<0);
-        marg = marg.filter((arr,i) => score[i]>=0);
-        marg = marg.map(arr => arr.filter((e,i) => score[i]>=0));
-        index = index.filter((e,i) => score[i]>= 0);
+        marg = marg.filter((arr,i) => score[i]>0);
+        marg = marg.map(arr => arr.filter((e,i) => score[i]>0));
+        index = index.filter((e,i) => score[i]> 0);
+        if (index.length > 0) backup = index;
+        else index = backup;
     } while(negativeScoreIndices.length > 0)
 
     let lotteries = helper.getWinnerLotteries(index,size);
