@@ -1,13 +1,21 @@
 //Answers Extract Queries
 const express = require('express');
 const router = express.Router();
-const solver = require('javascript-lp-solver');
+// const solver = require('javascript-lp-solver');
 const helper = require('../algorithm/helper');
+
+// var exec = require('child_process').exec, child;
+const execSync = require('child_process').execSync;
+// const util = require('util');
+const fs = require('fs');
+
+let totalTimeout = 2;
+let voterTimeoutLeft = totalTimeout;
 
 
 /**
  * Handle extract requests
- * {staircase} => {success, profies}
+ * {staircase} => {success, profiles, minimal}
  */
 router.post("",(req,res,next) => {
     let answer = extract(req.body.staircase);
@@ -30,14 +38,14 @@ module.exports.extract = extract;
  * Implementation of the staircase algorithm.
  */
 function extractOld (staircase) {
-    voteSize = staircase[0].length+1;
+    let voteSize = staircase[0].length+1;
 
     let pdic = {}
     do {
         //Get the biggest Element of the Staircase
-        arr = staircase.reduce((acc,val) => acc.concat(val))
+        let arr = staircase.reduce((acc,val) => acc.concat(val))
             .map(p => Math.abs(p));
-        maxStar = Math.max.apply(null,arr)
+        var maxStar = Math.max.apply(null,arr);
 
         //Repeat Extracting profiles
         for (var k = 0; k < maxStar; k++) {
@@ -45,7 +53,7 @@ function extractOld (staircase) {
             //Profile is the returned preference relation
             //Score is the current position in the prefernence ranking (large score is low position in the ranking)
             profile = new Array(voteSize).fill(0);
-            score = new Array(voteSize).fill(0);
+            let score = new Array(voteSize).fill(0);
 
             //Iterate through the staircase
             for (var i = 0; i < voteSize; i++) {
@@ -80,7 +88,7 @@ function extractOld (staircase) {
         }
     } while (maxStar > 0);
 
-    out = [];
+    let out = [];
     //Transform the map to the server answer
     for (var profile in pdic) {
         if (pdic.hasOwnProperty(profile)) {
@@ -142,6 +150,15 @@ function extractWithPromise (staircase) {
 function extract (staircase) {
     let size = staircase[0].length+1;
     let margin = helper.getFullMargins(staircase);
+    // Avoid I/O collisions
+    let staircaseHash = staircase.toString().hashCode();
+
+    // Check whether SoPlex binary file exists
+    // const file = 'SCIP/bin/soplex';
+    // fs.access(file, fs.constants.F_OK, (err) => {
+    //     console.log(`${file} ${err ? 'does not exist' : 'exists'}`);
+    // });
+
 
     // Start with the largest margin as the first try for the minimal number of voters
     let maxRow = margin.map(function(row){ return Math.max.apply(Math, row); });
@@ -157,30 +174,26 @@ function extract (staircase) {
         backup.minimal = true;
         return backup;
     }
-    if (n > 7 || size > 6) {
-        // We cannot yet stop the LP, so we do not try "large" instances at all for now
-        // TODO: Remove this when we can stop the LP
-        return backup;
-    }
 
-    let maxRunTime = 100;
-    let latestFinish = (+new Date()) + maxRunTime;
+    let totalStartTime = (+new Date());
 
     try {
         // Check if there is preference profile with exactly n voters
         do {
             console.log("Checking for "+n);
-            if (latestFinish <= (+new Date())) {
+            voterTimeoutLeft = totalStartTime + (totalTimeout * 1000) - (+new Date());
+            if (voterTimeoutLeft < 0) {
                 throw "Timeout!";
             }
-            let model = ["min: 0"];
+            let startTime = (+new Date());
+            // let model = ["min: 0"];
+            let modelStringForSCIP = "Minimize\n" + "0\n" + "Subject To\n";
+            let variableNames = [];
             for (let v = 0; v < n; v++) {
                 for (let i = 0; i < size; i++) {
                     for (let j = 0; j < size; j++) if (i !== j) {
                         let name = "v_"+v+"_d_"+i+"_"+j;
-                        model.push("int " + name);
-                        model.push(name + " >= 0");
-                        model.push(name + " <= 1");
+                        variableNames.push(name);
                     }
                 }
             }
@@ -190,11 +203,11 @@ function extract (staircase) {
                     for (let j = 0; j < size; j++) if (i !== j) {
                         if (i < j) {
                             // Anti-Symmetry
-                            model.push("v_"+v+"_d_"+i+"_"+j + " + "+"v_"+v+"_d_"+j+"_"+i + " = 1");
+                            modelStringForSCIP += "v_"+v+"_d_"+i+"_"+j + " + "+"v_"+v+"_d_"+j+"_"+i + " = 1\n";
                         }
                         for (let k = 0; k < size; k++) if (i !== k && j !== k) {
                             // Transitivity
-                            model.push("v_"+v+"_d_"+i+"_"+j + " + "+"v_"+v+"_d_"+j+"_"+k + " + "+"v_"+v+"_d_"+k+"_"+i +" >= 1");
+                            modelStringForSCIP += "v_"+v+"_d_"+i+"_"+j + " + "+"v_"+v+"_d_"+j+"_"+k + " + "+"v_"+v+"_d_"+k+"_"+i +" >= 1\n";
                         }
                     }
                 }
@@ -209,28 +222,53 @@ function extract (staircase) {
                         for (let v = 0; v < n; v++) {
                             sum += " + v_"+v+"_d_"+i+"_"+j + " - v_"+v+"_d_"+j+"_"+i;
                         }
-                        model.push(sum + " = " + margin[i][j]);
+                        modelStringForSCIP += sum + " = " + margin[i][j] + "\n";
                     }
                 }
             }
 
-            let reformattedModel = solver.ReformatLP(model);
+            modelStringForSCIP += "Binary\n";
+            for (let i = 0; i < variableNames.length; i++) {
+                modelStringForSCIP += " " + variableNames[i] + "\n";
+            }
+            modelStringForSCIP += "END";
+            // console.log("SCIP Model Time: "+ (((+new Date()) - startTime) / 1000));
 
-            // TODO : Support some form of timeout in the LP solver (!)
-            // reformattedModel["expects"] = {
-            //     _timeout: 1
-            // };
-            // const util = require('util');
-            // console.log(util.inspect(reformattedModel, false, null));
+            // startTime = (+new Date());
+            let fileName = "SCIP/profileProblem."+n+".voters.for.ID."+staircaseHash+".lp";
+            fs.writeFileSync(fileName, modelStringForSCIP); // Write the file SYNCHRONOUSLY (!)
+            // console.log("Write Time: "+ (((+new Date()) - startTime) / 1000));
 
-            let solution = solver.Solve(reformattedModel);
+            // Template to call SCIP or SoPlex via synchronous execution: https://stackoverflow.com/a/28394895/4050546
+            // let solutionSTRING = "";
+            //SCIP: ./SCIP/bin/scip -c "read problem.lp set limits time 1 optimize display solution quit"
+            // SoPlex: ./SCIP/bin/soplex --loadset=SCIP/bin/exact.set SCIP/problem.lp -X
+            // startTime = (+new Date());
+            let output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time ' + (voterTimeoutLeft/1000) + ' optimize display solution quit"').toString();
+            // console.log("Solve Time: "+ (((+new Date()) - startTime) / 1000));
 
-            // console.log("Done with solving: "+solution["feasible"]);
-            // console.log("Details: " + util.inspect(solution, false, null));
+            // startTime = (+new Date());
+            let solutionSTRING = "";
+            let solutionArea = false;
+            let feasible = false;
+            for (let line of output.split('\n')) {
+                // console.log(line);
+                if (line.includes("[infeasible]")) break;
+                if (line.includes("[time limit reached]")) return backup;
+                if (line.includes("[optimal solution found]")) feasible = true;
+                // if (line.includes("All other variables are zero.")) { console.log(solutionSTRING); break;}
+                if (feasible && solutionArea) solutionSTRING += line + "\n";
+                else if (line.includes("objective value:")) solutionArea = true;
+            }
+            // console.log("String Time: "+ (((+new Date()) - startTime) / 1000));
 
-            if (solution["feasible"]) {
-                // console.log("DONE! Time left: " + (-(+new Date()) + latestFinish));
-                // If the ILP is feasible, return the preference profile
+            execSync('rm '+fileName); // Delete the temporary file
+
+            // console.log("Total time: "+ (((+new Date()) - totalStartTime) / 1000) + " of total " + totalTimeout);
+
+            // If the ILP is feasible, return the preference profile
+            if (feasible) {
+                startTime = (+new Date());
                 let profile = {};
 
                 let matrix = [];
@@ -242,13 +280,7 @@ function extract (staircase) {
                     // Extract the solution for voter v into a matrix
                     for (let i = 0; i < size; i++) {
                         for (let j = 0; j < size; j++) if (i !== j) {
-                            let name = "v_"+v+"_d_" + i + "_" + j;
-                            if (solution.hasOwnProperty(name)) {
-                                matrix[i][j] = solution[name];
-                            }
-                            else {
-                                matrix[i][j] = solution["v_"+v+"_d_" + j + "_" + i] === 0 ? 1 : 0;
-                            }
+                            matrix[i][j] = solutionSTRING.includes("v_"+v+"_d_" + i + "_" + j);
                         }
                     }
 
@@ -256,7 +288,7 @@ function extract (staircase) {
                     let ranking = helper.getRankingFromMatrix(matrix);
 
                     //Add the ranking to the map if it is new
-                    if(! (ranking in profile)) {
+                    if(!(ranking in profile)) {
                         profile[ranking] = 0;
                     }
                     //Increment the number of voters of this ranking.
@@ -274,7 +306,7 @@ function extract (staircase) {
                         });
                     }
                 }
-
+                // console.log("Output Time: "+ (((+new Date()) - startTime) / 1000));
                 return {
                     profile: out,
                     minimal: true
@@ -291,3 +323,14 @@ function extract (staircase) {
     }
     return backup;
 }
+
+String.prototype.hashCode = function() {
+    var hash = 0, i, chr;
+    if (this.length === 0) return hash;
+    for (i = 0; i < this.length; i++) {
+        chr   = this.charCodeAt(i);
+        hash  = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+};
