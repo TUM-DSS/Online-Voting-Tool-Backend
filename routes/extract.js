@@ -163,6 +163,8 @@ function extract (staircase) {
     // Start with the largest margin as the first try for the minimal number of voters
     let maxRow = margin.map(function(row){ return Math.max.apply(Math, row); });
     let n = Math.max.apply(null, maxRow);
+    if (n === 0)
+        n = 2;
 
     // Compute the backup solution in advance
     let backup = extractOld(staircase);
@@ -175,6 +177,15 @@ function extract (staircase) {
         return backup;
     }
 
+    // If the heuristic yields very large profile,
+    // then start with it and try to decrease the size of the profile
+    let downwardOptimization = false;
+    if (voterCount > n + 20){
+        downwardOptimization = true;
+        n = voterCount - 2;
+    }
+
+
     let totalStartTime = (+new Date());
 
     try {
@@ -186,7 +197,6 @@ function extract (staircase) {
                 throw "Timeout!";
             }
             let startTime = (+new Date());
-            // let model = ["min: 0"];
             let modelStringForSCIP = "Minimize\n" + "0\n" + "Subject To\n";
             let variableNames = [];
             for (let v = 0; v < n; v++) {
@@ -218,7 +228,7 @@ function extract (staircase) {
             for (let i = 0; i < size; i++) {
                 for (let j = 0; j < size; j++) if (i !== j) {
                     if (i < j) {
-                        let sum = "0.0";
+                        let sum = "";
                         for (let v = 0; v < n; v++) {
                             sum += " + v_"+v+"_d_"+i+"_"+j + " - v_"+v+"_d_"+j+"_"+i;
                         }
@@ -235,7 +245,8 @@ function extract (staircase) {
             // console.log("SCIP Model Time: "+ (((+new Date()) - startTime) / 1000));
 
             // startTime = (+new Date());
-            let fileName = "SCIP/profileProblem."+n+".voters.for.ID."+staircaseHash+".lp";
+            let fileName = "SCIP/" + (downwardOptimization ? "downward" : "" ) + "profileProblem.for.ID."+staircaseHash+".and."+n+".voters.lp";
+            // console.log(fileName);
             fs.writeFileSync(fileName, modelStringForSCIP); // Write the file SYNCHRONOUSLY (!)
             // console.log("Write Time: "+ (((+new Date()) - startTime) / 1000));
 
@@ -253,10 +264,21 @@ function extract (staircase) {
             let feasible = false;
             for (let line of output.split('\n')) {
                 // console.log(line);
-                if (line.includes("[infeasible]")) break;
-                if (line.includes("[time limit reached]")) return backup;
-                if (line.includes("[optimal solution found]")) feasible = true;
-                // if (line.includes("All other variables are zero.")) { console.log(solutionSTRING); break;}
+                if (line.includes("[infeasible]")) {
+                    if (downwardOptimization) {
+                        execSync('rm '+fileName); // Delete the temporary file
+                        backup.minimal = true;
+                        return backup;
+                    }
+                    break;
+                }
+                if (line.includes("[time limit reached]")) {
+                    execSync('rm '+fileName); // Delete the temporary file
+                    throw "Internal Timeout!";
+                }
+                if (line.includes("[optimal solution found]")) {
+                    feasible = true;
+                }
                 if (feasible && solutionArea) solutionSTRING += line + "\n";
                 else if (line.includes("objective value:")) solutionArea = true;
             }
@@ -266,7 +288,7 @@ function extract (staircase) {
 
             // console.log("Total time: "+ (((+new Date()) - totalStartTime) / 1000) + " of total " + totalTimeout);
 
-            // If the ILP is feasible, return the preference profile
+            // If the ILP is feasible, return the preference profile or store it as backup in the case of downward optimization
             if (feasible) {
                 startTime = (+new Date());
                 let profile = {};
@@ -307,19 +329,27 @@ function extract (staircase) {
                     }
                 }
                 // console.log("Output Time: "+ (((+new Date()) - startTime) / 1000));
-                return {
-                    profile: out,
-                    minimal: true
-                };
+                if (downwardOptimization) {
+                    backup = {
+                        profile: out,
+                        minimal: false
+                    };
+                } else {
+                    return {
+                        profile: out,
+                        minimal: true
+                    };
+                }
             }
 
-            // If not, increment n by two and start again;
-            n = n + 2;
+            // If not, increment (or decrement in case of downward optimization) n by two and start again;
+            n = downwardOptimization ? n - 2 : n + 2;
         } while (true);
     }
     catch (e) {
         // If ILP failed or timed out or something else failed, then use Dominik's staircase algorithm as backup
         console.log("Extraction with ILP failed due to " + e + "! Backup algorithm is used!");
+        // fs.writeFileSync("log"+(+(new Date()))+".txt", "Extraction with ILP failed due to " + e + "! Backup algorithm is used!");
     }
     return backup;
 }
