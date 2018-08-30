@@ -493,12 +493,15 @@ exports.randomDictatorship = function randomDictatorship(data) {
         score[profile[i].relation[0]] += profile[i].numberOfVoters;
         sum += profile[i].numberOfVoters;
     }
+    console.log(util.inspect(score));
 
     for (let i = 0; i < alternatives; i++) {
-        exactLottery[i][0] = score[i];
-        exactLottery[i][1] = sum;
+        exactLottery[i] = [score[i], sum];
         score[i] = 1.0 * score[i] / sum;
     }
+
+
+    // console.log(util.inspect(score));
 
     return {
         success: true,
@@ -528,10 +531,11 @@ exports.proportionalBorda = function proportionalBorda(data) {
     }
 
     for (let i = 0; i < alternatives; i++) {
-        exactLottery[i][0] = score[i];
-        exactLottery[i][1] = sum;
+        exactLottery[i] = [score[i], sum];
         score[i] = 1.0 * score[i] / sum;
     }
+
+    console.log(util.inspect(exactLottery));
 
 
     return {
