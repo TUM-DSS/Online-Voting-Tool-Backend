@@ -1,7 +1,10 @@
 const helper = require('./helper');
 const types = require('./answerTypes');
-const solver = require('javascript-lp-solver');
+// const solver = require('javascript-lp-solver');
 const feasibilityCounter = require('./feasibilityCounter');
+const execSync = require('child_process').execSync;
+const fs = require('fs');
+const util = require('util');
 
 /**
  * Computes the polytopes of
@@ -12,19 +15,66 @@ const feasibilityCounter = require('./feasibilityCounter');
  * Compute the polytope of the MaximalLottery
  */
 exports.maxLottery = function maxLottery(data) {
-    let size = data.staircase[0].length+1;
+    // let size = data.staircase[0].length+1;
+    let margin = helper.getFullMargins(data.staircase);
+    let size = margin[0].length;
 
-    let model = exports._getMaxLotteryLP(data);
+    // let model = exports._getMaxLotteryLP(data);
+    //
+    // let lotteries = exports._computePolytope(model,size);
 
-    let lotteries = exports._computePolytope(model,size);
+    let startTime = (+new Date());
+    let nashString = size + " " + size + "\n\n";
+
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            nashString += margin[i][j] + " ";
+        }
+        nashString += "\n";
+    }
+    nashString += "\n";
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            nashString += (-1 * margin[i][j]) + " ";
+        }
+        nashString += "\n";
+    }
+    let fileName = "lrs/Game.for.ID."+nashString.hashCode()+".lp";
+    fs.writeFileSync(fileName, nashString); // Write the file SYNCHRONOUSLY (!)
+
+
+    let output = execSync('./lrs/lrsnash ' + fileName).toString();
+    execSync('rm '+fileName); // Delete the temporary file
+
+    let nashLotteries = [];
+    let exactNashLotteries = [];
+    for (let line of output.split('\n')) {
+        if (line.startsWith("1")) {
+            let splitLine = line.split("  ");
+            let nashLottery = [];
+            let exactNashLottery = [];
+            for (let i = 0; i < size; i++) {
+                let entry = splitLine[i+1];
+                exactNashLottery.push(entry.includes("/") ? entry.split("/").map(function (x) {return parseInt(x);}) : [parseInt(entry), 1]);
+                nashLottery.push(eval(entry));
+            }
+            exactNashLotteries.push(exactNashLottery);
+            nashLotteries.push(nashLottery);
+        }
+    }
+    // For Debugging
+    // console.log( "lrsNash Time: " + ((+new Date()) - startTime) / 1000);
+    // console.log("nash: "+util.inspect(nashLotteries));
+    // console.log("exact: "+util.inspect(exactNashLotteries));
+    // console.log("LP: "+util.inspect(lotteries));
 
     //The polytope is empty
-    if(lotteries.length === 0) {
+    if(nashLotteries.length === 0) {
         //Computation timed out
         if(exports.abort) {
             return {
                 success: false,
-                msg: "Server Timeout"
+                msg: "Server Timeout in Backend"
             }
         }
 
@@ -36,7 +86,8 @@ exports.maxLottery = function maxLottery(data) {
         return {
             success: true,
             type: types.Lotteries,
-            result: lotteries
+            result: nashLotteries,
+            exact: exactNashLotteries
         }
     }
 };
@@ -210,6 +261,7 @@ exports._getMaxLotteryLP = function getMaxLotteryLP(data) {
         constraint += "-1 Value >= 0";
         model.push(constraint);
     }
+
     return solver.ReformatLP(model);
 };
 
@@ -232,7 +284,11 @@ exports._getLotteryFromSolution = function(solution,size) {
  * Computes the corners of a polytope by enumerating all constraint combination
  */
 exports._computePolytope = function (model,size) {
+    // console.log("------- ERROR --------");
     let index = [];
+    let jsTIME = 0;
+    let soplexTIME = 0;
+    // console.log(util.inspect(model, false, null));
     //Get the <=  and >= constraints (i.e. the constraints that can be tight in a corner)
     for (let constraint in model.constraints) {
         if (model.constraints.hasOwnProperty(constraint)) {
@@ -294,8 +350,77 @@ exports._computePolytope = function (model,size) {
             }
         });
 
+        let startTime = (+new Date());
+        // Convert to LP file format
+        // Step 0:
+        let modelString = "";
+        if (model.opType === 'max') {
+            modelString = "Maximize\n" + "Value\n" + "Subject To\n";
+        }
+
+        // Step 1 - Find out all variables:
+        let variableList = [];
+        for (let variable in model.variables) {
+            if (model.variables.hasOwnProperty(variable)) {
+                variableList.push(variable);
+            }
+        }
+
+        const util = require('util');
+
+        // Step 2 - Write down the constraints:
+        for (let constraint in model.constraints) {
+            if (model.constraints.hasOwnProperty(constraint)) {
+                for (let i in variableList) {
+                    let variable = variableList[i];
+                    if (model.variables[variable].hasOwnProperty(constraint)){
+                        let coefficient = model.variables[variable][constraint].toString();
+                        if (!coefficient.includes("-")) coefficient = "+ "+coefficient;
+                        modelString += " " + coefficient + " " + variable + " ";
+                    }
+                }
+                if(model.constraints[constraint].hasOwnProperty("min")){
+                    modelString += " >= " + model.constraints[constraint]["min"] + " \n";
+                }
+                if(model.constraints[constraint].hasOwnProperty("max")){
+                    modelString += " <= " + model.constraints[constraint]["max"] + " \n";
+                }
+                if(model.constraints[constraint].hasOwnProperty("equal")){
+                    modelString += " = " + model.constraints[constraint]["equal"] + " \n";
+                }
+            }
+        }
+        modelString += "END";
+        // console.log("Convert Time: "+ (((+new Date()) - startTime) / 1000));
+
+
+
+        startTime = (+new Date());
         solution = solver.Solve(model);
+        jsTIME += (((+new Date()) - startTime) / 1000);
         if(solution.feasible) {
+
+            // SoPlex Solving
+            // TODO: Use SoPlex only with the important instances?
+            startTime = (+new Date());
+            let fileName = "SCIP/MaximalLottery.for.model.ID."+modelString.hashCode()+".lp";
+            fs.writeFileSync(fileName, modelString); // Write the file SYNCHRONOUSLY (!)
+            // console.log("Write Time: "+ (((+new Date()) - startTime) / 1000));
+
+            // Solving:
+            // ./SCIP/bin/soplex --loadset=SCIP/bin/exact.set SCIP/problem.lp -X
+            startTime = (+new Date());
+            // let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X').toString();
+            soplexTIME += (((+new Date()) - startTime) / 1000);
+            execSync('rm '+fileName); // Delete the temporary file
+            // TODO: Reconvert the solution
+            // console.log(output);
+            //
+            // console.log(util.inspect(model, false, null));
+            // console.log(" ");
+            // console.log(modelString);
+            // console.log("------------");
+
             //Check if the tight constraints of the found solution is a superset of another solution
             //if so remove this other solution since it isn't maximal (i.e. not a corner)
             for (let oldEntry in map) {
@@ -335,7 +460,10 @@ exports._computePolytope = function (model,size) {
         }
         return 0;
     });
-
+    // For Debugging:
+    // console.log("Solving Time jsLP: "+ jsTIME);
+    // console.log("Solving Time SoPlex: "+ soplexTIME);
+    // console.log("------------");
     return lotteries;
 };
 
@@ -357,6 +485,7 @@ exports._voteName = function voteName(candidate) {
 exports.randomDictatorship = function randomDictatorship(data) {
     let alternatives = data.staircase.length+1;
     let score = new Array(alternatives).fill(0);
+    let exactLottery = new Array(alternatives).fill([0,1]);
 
     let profile = data.profile;
     let sum = 0;
@@ -366,14 +495,16 @@ exports.randomDictatorship = function randomDictatorship(data) {
     }
 
     for (let i = 0; i < alternatives; i++) {
+        exactLottery[i][0] = score[i];
+        exactLottery[i][1] = sum;
         score[i] = 1.0 * score[i] / sum;
     }
-
 
     return {
         success: true,
         type: types.Lotteries,
-        result: [score]
+        result: [score],
+        exact: [exactLottery]
     }
 };
 
@@ -383,6 +514,7 @@ exports.randomDictatorship = function randomDictatorship(data) {
 exports.proportionalBorda = function proportionalBorda(data) {
     let alternatives = data.staircase.length+1;
     let score = new Array(alternatives).fill(0);
+    let exactLottery = new Array(alternatives).fill([0,1]);
 
     let profile = data.profile;
     let sum = 0;
@@ -396,6 +528,8 @@ exports.proportionalBorda = function proportionalBorda(data) {
     }
 
     for (let i = 0; i < alternatives; i++) {
+        exactLottery[i][0] = score[i];
+        exactLottery[i][1] = sum;
         score[i] = 1.0 * score[i] / sum;
     }
 
@@ -403,6 +537,18 @@ exports.proportionalBorda = function proportionalBorda(data) {
     return {
         success: true,
         type: types.Lotteries,
-        result: [score]
+        result: [score],
+        exact: [exactLottery]
     }
+};
+
+String.prototype.hashCode = function() {
+    var hash = 0, i, chr;
+    if (this.length === 0) return hash;
+    for (i = 0; i < this.length; i++) {
+        chr   = this.charCodeAt(i);
+        hash  = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
 };

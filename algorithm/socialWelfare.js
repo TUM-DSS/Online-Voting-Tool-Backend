@@ -2,6 +2,9 @@ const helper = require('./helper');
 const types = require('./answerTypes');
 const socialChoice  = require('./socialChoice');
 const solver = require('javascript-lp-solver');
+const execSync = require('child_process').execSync;
+// const util = require('util');
+const fs = require('fs');
 
 /**
  * Compute the social welfare functions
@@ -103,6 +106,44 @@ exports._getStringKemenyILP = function getStringKemenyILP(margin) {
     return model;
 };
 
+exports._getScipStringKemenyILP = function getScipStringKemenyILP(margin) {
+    let model =  "Maximize\n" + "Value\n" + "Subject To\n";
+    let sum = "";
+    let variableNames = [];
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) if (i !== j) {
+            let name = "d_"+i+"_"+j;
+            variableNames.push(name);
+        }
+    }
+
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) if (i !== j) {
+            if (i < j) {
+                // Anti-Symmetry
+                model += "d_"+i+"_"+j + " + d_"+j+"_"+i + " = 1\n";
+                sum += (margin[i][j] < 0 ? "" : "+") +  margin[i][j]+ " d_"+i+"_"+j + " ";
+            }
+            for (let k = 0; k < size; k++) if (i !== k && j !== k) {
+                // Transitivity
+                model += "d_"+i+"_"+j + " + d_"+j+"_"+k + " + d_"+k+"_"+i +" >= 1\n";
+            }
+        }
+    }
+
+    model += sum + " -1 Value = 0\n";
+
+    let binarySection = "Binary\n";
+    for (let i = 0; i < variableNames.length; i++) {
+        binarySection += variableNames[i] + "\n";
+    }
+
+    return {
+        model: model,
+        binarySection: binarySection
+    };
+};
+
 
 
 /**
@@ -145,21 +186,52 @@ exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
     let margin = helper.getFullMargins(data.staircase);
     let winners = [];
     let tooltip = [];
+    let timeout= 2;
 
-        let model = this._getStringKemenyILP(margin);
-    let solution = solver.Solve(solver.ReformatLP(model));
+    let modelString = this._getScipStringKemenyILP(margin);
+    // let solution = solver.Solve(solver.ReformatLP(model));
 
-    let value = solution["Value"];
+    let fileName = "SCIP/kemeny.for.ID."+modelString.model.hashCode()+".lp";
+    fs.writeFileSync(fileName, modelString.model + modelString.binarySection + "END"); // Write the file SYNCHRONOUSLY (!)
+    let output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time ' + timeout + ' optimize display solution quit"').toString();
+
+    let solutionSTRING = "";
+    let solutionArea = false;
+    let feasible = false;
+    let value;
+    for (let line of output.split('\n')) {
+        if (line.includes("[time limit reached]")) {
+            execSync('rm '+fileName); // Delete the temporary file
+            return {
+                success: false,
+                type: types.Lotteries,
+                tooltip: tooltip,
+                result: "-"
+            }
+        }
+        if (line.includes("[optimal solution found]")) {
+            feasible = true;
+        }
+        if (feasible && solutionArea) solutionSTRING += line + "\n";
+        else if (line.includes("objective value:")) {
+            solutionArea = true;
+            value = parseInt(line.match(/\d+/)[0]);
+        }
+    }
+    execSync('rm '+fileName); // Delete the temporary file
+
+
 
     for (let i = 0; i < size; i++) {
         for (let j = 0; j < size; j++) if (i !== j) {
             let name = "d_" + i + "_" + j;
-            if (solution.hasOwnProperty(name)) {
-                margin[i][j] = solution[name];
-            }
-            else {
-                margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
-            }
+            margin[i][j] = solutionSTRING.includes(name);
+            // if (solution.hasOwnProperty(name)) {
+            //     margin[i][j] = solution[name];
+            // }
+            // else {
+            //     margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
+            // }
         }
     }
 
@@ -175,22 +247,56 @@ exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
         for (let i = 0; i < size; i++) if (recentWinner !== i) {
             constraint += " + d_" + i + "_" + recentWinner + " ";
         }
-        model.push(constraint + " >= 1");
+        modelString.model += constraint + " >= 1\n";
 
-        let solution = solver.Solve(solver.ReformatLP(model));
-        if (!solution["feasible"] || solution["Value"] < value) {
+        // let solution = solver.Solve(solver.ReformatLP(model));
+
+        // Solve it again
+        fileName = "SCIP/kemeny.for.ID."+modelString.model.hashCode()+".and.lp";
+        fs.writeFileSync(fileName, modelString.model + modelString.binarySection + "END"); // Write the file SYNCHRONOUSLY (!)
+        output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time ' + timeout + ' optimize display solution quit"').toString();
+
+        solutionSTRING = "";
+        solutionArea = false;
+        feasible = false;
+        let newValue;
+        for (let line of output.split('\n')) {
+            if (line.includes("[time limit reached]")) {
+                execSync('rm '+fileName); // Delete the temporary file
+                return {
+                    success: false,
+                    type: types.Lotteries,
+                    tooltip: tooltip,
+                    result: "-"
+                }
+            }
+            if (line.includes("[optimal solution found]")) {
+                feasible = true;
+            }
+            if (feasible && solutionArea) solutionSTRING += line + "\n";
+            else if (line.includes("objective value:")) {
+                solutionArea = true;
+                newValue = parseInt(line.match(/\d+/)[0]);
+            }
+        }
+        execSync('rm '+fileName); // Delete the temporary file
+
+
+
+        if (!feasible || newValue < value) {
             break;
         }
         else {
             for (let i = 0; i < size; i++) {
                 for (let j = 0; j < size; j++) if (i !== j) {
                     let name = "d_" + i + "_" + j;
-                    if (solution.hasOwnProperty(name)) {
-                        margin[i][j] = solution[name];
-                    }
-                    else {
-                        margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
-                    }
+                    margin[i][j] = solutionSTRING.includes(name);
+                    // if (solution.hasOwnProperty(name)) {
+                    //     margin[i][j] = solution[name];
+                    // }
+                    // else {
+                    //     margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
+                    // }
                 }
             }
             ranking = helper.getRankingFromMatrix(margin);
