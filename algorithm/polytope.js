@@ -401,10 +401,9 @@ exports._computePolytope = function (model,size) {
         if(solution.feasible) {
 
             // SoPlex Solving
-            // TODO: Use SoPlex only with the important instances?
             startTime = (+new Date());
             let fileName = "SCIP/MaximalLottery.for.model.ID."+modelString.hashCode()+".lp";
-            fs.writeFileSync(fileName, modelString); // Write the file SYNCHRONOUSLY (!)
+            // fs.writeFileSync(fileName, modelString); // Write the file SYNCHRONOUSLY (!)
             // console.log("Write Time: "+ (((+new Date()) - startTime) / 1000));
 
             // Solving:
@@ -412,14 +411,7 @@ exports._computePolytope = function (model,size) {
             startTime = (+new Date());
             // let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X').toString();
             soplexTIME += (((+new Date()) - startTime) / 1000);
-            execSync('rm '+fileName); // Delete the temporary file
-            // TODO: Reconvert the solution
-            // console.log(output);
-            //
-            // console.log(util.inspect(model, false, null));
-            // console.log(" ");
-            // console.log(modelString);
-            // console.log("------------");
+            // execSync('rm '+fileName); // Delete the temporary file
 
             //Check if the tight constraints of the found solution is a superset of another solution
             //if so remove this other solution since it isn't maximal (i.e. not a corner)

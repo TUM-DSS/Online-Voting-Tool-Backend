@@ -11,7 +11,8 @@
     "body-parser": "*",
     "cors": "*",
     "express": "*",
-    "javascript-lp-solver": "^0.4.5"
+    "javascript-lp-solver": "^0.4.5",
+    "mathjs": "latest"
   },
   "author": "Dominik Spies",
   "license": "ISC"
