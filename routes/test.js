@@ -397,7 +397,6 @@ function _getExactStochasticDominanceLP(lottery,preferenceProfile) {
         for (let j=0; j< nrOfCandidates; j++) {
 
             let value = math.fraction('0');
-            console.log(value);
             let constraint = "";
 
 

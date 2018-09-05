@@ -8,9 +8,9 @@ const router = express.Router();
 router.post("",(req,res,next) => {
     // console.log("Incoming",req.body);
 
-    response = {
+    let response = {
         success: false,
-        msg:"An unknown error has occured."
+        msg: "An unknown error has occured."
     }
 
     switch (req.body.algorithm.toLowerCase()) {
@@ -112,15 +112,15 @@ router.post("",(req,res,next) => {
 
         // Social Welfare Functions
 
-        case "kemeny":
-            response = socialWelfare.kemeny(req.body);
-            break;
+        // case "kemeny":
+        //     response = socialWelfare.kemeny(req.body);
+        //     break;
 
-        case "kemenyilp":
+        case "kemeny ranking":
             response = socialWelfare.kemenyILP(req.body);
             break;
 
-        case "kemeny winners":
+        case "kemeny":
             response = socialWelfare.kemenyWinnersILP(req.body);
             break;
 

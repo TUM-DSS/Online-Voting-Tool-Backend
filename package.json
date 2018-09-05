@@ -8,7 +8,7 @@
     "start": "node app"
   },
   "dependencies": {
-    "body-parser": "*",
+    "body-parser": "^1.18.3",
     "cors": "*",
     "express": "*",
     "javascript-lp-solver": "^0.4.5",

@@ -153,18 +153,66 @@ exports.kemenyILP = function kemenyILP(data) {
     let size = data.staircase[0].length+1;
     let margin = helper.getFullMargins(data.staircase);
 
-    let model = this._getKemenyILP(margin);
-    let solution = solver.Solve(model);
+    let modelParts = this._getScipStringKemenyILP(margin);
+    let modelString = modelParts.model + modelParts.binarySection + "\nEND";
+
+    let fileName = "SCIP/kemenyRanking.for.ID."+modelString.hashCode()+".lp";
+    fs.writeFileSync(fileName, modelString); // Write the file SYNCHRONOUSLY (!)
+    let output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time 2 optimize display solution quit"').toString();
+    execSync('rm '+fileName); // Delete the temporary file
+
+    let solutionSTRING = "";
+    let solutionArea = false;
+    let feasible = false;
+    let value;
+    for (let line of output.split('\n')) {
+        if (line.includes("[time limit reached]")) {
+            return {
+                success: false,
+                type: types.Profile,
+                result: "-"
+            }
+        }
+        if (line.includes("[optimal solution found]")) {
+            feasible = true;
+        }
+        if (feasible && solutionArea) solutionSTRING += line + "\n";
+        else if (line.includes("objective value:")) {
+            solutionArea = true;
+            value = parseInt(line.match(/\d+/)[0]);
+        }
+    }
+
+
+    // Use SCIP to count the number of Kemeny ranking
+
+    let maximum = 100;
+    modelString = modelParts.model + "Value - " + value + " = 0\n" + modelParts.binarySection + "\nEND";
+    fileName = "SCIP/kemenyCounting.for.ID."+modelString.hashCode()+".lp";
+    fs.writeFileSync(fileName, modelString); // Write the file SYNCHRONOUSLY (!)
+    output = execSync('./SCIP/bin/scip -c "read '+fileName+' set constraints countsols sollimit ' + maximum + ' count quit"').toString();
+    execSync('rm '+fileName); // Delete the temporary file
+
+    let count = 0;
+    for (let line of output.split('\n')) {
+        if (line.includes("[solving was interrupted]")) {
+            count = maximum + 1;
+            break;
+        }
+        if (line.includes("Feasible Solutions : ")) {
+            count = parseInt(line.match(/\d+/)[0]);
+            break;
+        }
+    }
+    console.log("count: "+count);
+
+
+
 
     for (let i = 0; i < size; i++) {
         for (let j = 0; j < size; j++) if (i !== j) {
             let name = "d_" + i + "_" + j;
-            if (solution.hasOwnProperty(name)) {
-                margin[i][j] = solution[name];
-            }
-            else {
-                margin[i][j] = solution["d_" + j + "_" + i] === 0 ? 1 : 0;
-            }
+            margin[i][j] = solutionSTRING.includes(name);
         }
     }
 
@@ -174,7 +222,9 @@ exports.kemenyILP = function kemenyILP(data) {
     return {
         success:true,
         type: types.Profile,
-        result: ranking
+        result: ranking,
+        count: count,
+        maximumCount : maximum
     }
 };
 
@@ -186,7 +236,7 @@ exports.kemenyWinnersILP = function kemenyWinnersILP(data) {
     let margin = helper.getFullMargins(data.staircase);
     let winners = [];
     let tooltip = [];
-    let timeout= 2;
+    let timeout = 4;
 
     let modelString = this._getScipStringKemenyILP(margin);
     // let solution = solver.Solve(solver.ReformatLP(model));
