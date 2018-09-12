@@ -29,7 +29,7 @@ router.post("",(req,res,next) => {
         sdresult: checkSDEfficiency(lotteries,profile),
         pcresult: checkPCEfficiency(lotteries,profile)
     };
-    console.log("Response",util.inspect(response));
+    // console.log("Response",util.inspect(response));
     res.send(response);
 });
 
@@ -130,7 +130,7 @@ function _getLotteryFromLPSolution(lottery,model) {
 function _getExactLotteryFromLPSolution(lottery,model) {
     let fileName = "SCIP/Efficiency.for.model.ID."+model.hashCode()+".lp";
     fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
-    let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X').toString();
+    let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
     execSync('rm '+fileName); // Delete the temporary file
 
     let solutionMap = { epsilon: "0"};

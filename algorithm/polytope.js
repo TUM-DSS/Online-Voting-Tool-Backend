@@ -43,7 +43,7 @@ exports.maxLottery = function maxLottery(data) {
     fs.writeFileSync(fileName, nashString); // Write the file SYNCHRONOUSLY (!)
 
 
-    let output = execSync('./lrs/lrsnash ' + fileName).toString();
+    let output = execSync('./lrs/lrsnash ' + fileName, {stdio:[]}).toString();
     execSync('rm '+fileName); // Delete the temporary file
 
     let nashLotteries = [];

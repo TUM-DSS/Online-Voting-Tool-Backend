@@ -163,6 +163,15 @@ function extract (staircase) {
     // Start with the largest margin as the first try for the minimal number of voters
     let maxRow = margin.map(function(row){ return Math.max.apply(Math, row); });
     let n = Math.max.apply(null, maxRow);
+    // Start with the largest sum of the weights of a three-cycle
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) if (margin[i][j] > 0) {
+            for (let k = 0; k < size; k++) if (margin[j][k] > 0 && margin[k][i] > 0) {
+                let sum = margin[i][j] + margin[j][k] + margin[k][i];
+                if (n < sum) n = sum;
+            }
+        }
+        }
     if (n === 0)
         n = 2;
 
@@ -180,10 +189,11 @@ function extract (staircase) {
     // If the heuristic yields very large profile,
     // then start with it and try to decrease the size of the profile
     let downwardOptimization = false;
-    if (voterCount > n + 20){
-        downwardOptimization = true;
-        n = voterCount - 2;
-    }
+    // Attention: This is temporarily deactivated because analyzing three-cycles turns out to usually be a better heuristic!
+    // if (voterCount > n + 20){
+        // downwardOptimization = true;
+        // n = voterCount - 2;
+    // }
 
 
     let totalStartTime = (+new Date());
