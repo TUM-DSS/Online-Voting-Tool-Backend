@@ -1,6 +1,7 @@
 const helper = require('./helper');
 const types = require('./answerTypes');
 const priorityQueue = require('./priorityQueue');
+const util = require('util');
 
 /**
  * Computes the social choice function (except essentialSet)
@@ -398,20 +399,20 @@ exports.tideman = function tideman(data) {
 /**
  * Compute the maximin winner of a given data object
  */
-exports.maximin = function minimax(data) {
+exports.maximin = function maximin(data) {
     marg = helper.getFullMargins(data.staircase);
     //Compute min of each row
-    mini = marg.map(arr => Math.min(...arr))
+    mini = marg.map(arr => Math.min(...arr));
     //Get the max of the mins
     let winScore = Math.max(...mini);
     //find all rows with maximal mincolumn
-    let winner = mini.reduce((p,c,i,a) => c ==  winScore ? p.concat(i) : p,[]);
+    let winner = mini.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
     let lotteries = helper.getWinnerLotteries(winner,marg.length);
 
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Row minima: " + mini,
+        tooltip: "Row Minima: " + mini,
         result: lotteries
     }
 }
@@ -621,10 +622,10 @@ exports.condorcet = function condorcet(data) {
     //if there is one return it
     if(condorcet>=0) {
         winners.push(condorcet);
-        tooltip = "Strict Condorcet winner!";
+        tooltip = "Strict Condorcet Winner!";
     }
     else if (weakCondorcet >= 0) {
-        tooltip = "Weak Condorcet winners!";
+        tooltip = "Weak Condorcet Winners!";
         xLoop:
         for (let x = 0; x < margin.length; x++) {
             for (let y = 0; y < margin.length; y++) {
@@ -640,7 +641,7 @@ exports.condorcet = function condorcet(data) {
         //     winners.push(x);
         // }
         winners.push(-1);
-        tooltip = "No (weak) Condorcet winner!";
+        tooltip = "No (weak) Condorcet Winner!";
     }
 
     return {
@@ -688,17 +689,37 @@ exports.pareto = function pareto(data) {
 };
 
 /**
- * Compute the ranked Pairs winner of a given data object
+ * Compute the ranked Pairs winner of a given data object (and trivially try to break ties in favor of testCandidate if there is one)
+ */
+exports.allRankedPairsWinnersWithTrivialTieBreaking = function allRankedPairsWinnersWithTrivialTieBreaking(data) {
+    let winners = [];
+    for (let i = 0; i < data.staircase.length+1; i++) if (this.rankedPairsWinnerWithTestCandidate(data, i).success) winners.push(i);
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: helper.getWinnerLotteries(winners,data.staircase.length+1)
+    }
+};
+
+/**
+ * Compute the ranked Pairs winner of a given data object (and trivially try to break ties in favor of testCandidate if there is one)
  */
 exports.rankedPairsWinner = function rankedPairsWinner(data) {
+    return this.rankedPairsWinnerWithTestCandidate(data, -1);
+};
+
+/**
+ * Compute the ranked Pairs winner of a given data object (and trivially try to break ties in favor of testCandidate if there is one)
+ */
+exports.rankedPairsWinnerWithTestCandidate = function rankedPairsWinnerWithTestCandidate(data, testCandidate) {
     //Setup a priority queue
     let queue = new priorityQueue( (a,b) => a.weight > b.weight);
     let stair = data.staircase;
     let size = stair[0].length + 1;
 
     //Buildup weighted Graph
-    for (var i = 0; i < stair.length; i++) {
-        for (var j = 0; j < stair[i].length; j++) {
+    for (let i = 0; i < stair.length; i++) {
+        for (let j = 0; j < stair[i].length; j++) {
             let weight,from,to;
 
             if(stair[i][j]>0) {
@@ -706,7 +727,7 @@ exports.rankedPairsWinner = function rankedPairsWinner(data) {
                 from = i;
                 to = j+i+1;
             } else {
-                weight = -stair[i][j]
+                weight = -stair[i][j];
                 to = i;
                 from = j+i+1;
             }
@@ -716,32 +737,64 @@ exports.rankedPairsWinner = function rankedPairsWinner(data) {
     }
 
     let graph = [];
-    for (var i = 0; i < size; i++) {
+    for (let i = 0; i < size; i++) {
         graph.push(new exports._Node(size,graph));
     }
 
-    let domID,subID = 0
+    let domID,subID = 0;
+    let weight = Number.MAX_SAFE_INTEGER;
+    let tieBreakingTestActive = false;
+    let forbiddenEdges = [];
 
     //Graph Search
     while(!queue.isEmpty()) {
         let edge = queue.pop();
         //Find maximum -> (dom,sub)
+
+        // In the case of indifference: Break the tie in favor of the test candidate
+        if (edge.to === testCandidate && edge.weight === 0) {
+            edge.to = edge.from;
+            edge.from = testCandidate;
+        }
+
         domID = edge.from;
         let dom = graph[domID];
         subID = edge.to;
         let sub = graph[subID];
         //if sub is not strongerThan dom:
-        if(! sub.isStrongerThan(domID)) {
-            // dom + dom.weakerThan ->  sub.weakerThan + transitive
+        if(!sub.isStrongerThan(domID)) {
+
+
+            // If we are trying another edge to help the test candidate to survive and this other edge has a smaller weight,
+            // then we cannot help the test candidate any more with trivial tie-breaking and we have to abort.
+            if (tieBreakingTestActive && edge.weight < weight) {
+                return {
+                    success: false,
+                    msg: "No trivial tie-breaking with testCandidate" + testCandidate + " possible!"
+                }
+            } else if (tieBreakingTestActive && edge.weight === weight && edge.to !== testCandidate) {
+                for (let f = 0; f < forbiddenEdges.length; f++) queue.push(forbiddenEdges[f]);
+                forbiddenEdges = [];
+                tieBreakingTestActive = false;
+            } else weight = edge.weight;
+
+            // If this edge would make the test candidate lose, then discard the edge temporarily and try with another edge with the same weight
+            if (edge.to === testCandidate) {
+                forbiddenEdges.push(edge);
+                tieBreakingTestActive = true;
+                continue;
+            }
+
+            // dom + dom.weakerThan  ->  sub.weakerThan + transitive
             let strongSet = dom.weakerThan.union(new Set([domID]));
             sub.submitTo(strongSet);
 
-            // sub + sub.strongerThan ->dom.strongerThan + transitive
+            // sub + sub.strongerThan  ->  dom.strongerThan + transitive
             let weakSet   = sub.strongerThan.union(new Set([subID]));
             dom.dominate(weakSet);
         }
 
-        for (var i = 0; i < size; i++) {
+        for (let i = 0; i < size; i++) {
             if(graph[i].isWinner()) {
                 return {
                     success: true,
@@ -752,7 +805,7 @@ exports.rankedPairsWinner = function rankedPairsWinner(data) {
         }
     }
 
-    for (var i = 0; i < size; i++) {
+    for (let i = 0; i < size; i++) {
         if(graph[i].isWinner()) {
             return {
                 success: true,
@@ -766,7 +819,7 @@ exports.rankedPairsWinner = function rankedPairsWinner(data) {
         success: false,
         msg: "Search failed"
     }
-}
+};
 
 /**
  * Graph helper functions
@@ -777,18 +830,18 @@ exports._Edge = function Edge(from,to,weight) {
     this.from = from;
     this.to = to;
     this.weight = weight;
-}
+};
 
-//Node objects storeing stronger and weaker nodes
+//Node objects storing stronger and weaker nodes
 exports._Node = function Node(graphSize,graph) {
     this.size = graphSize;
     this.graph = graph;
     this.weakerThan = new Set();
     this.strongerThan = new Set();
-}
+};
 
 exports._Node.prototype.isWinner = function () {
-    return this.strongerThan.size == (this.size-1);
+    return this.strongerThan.size === (this.size-1);
 };
 
 exports._Node.prototype.isStrongerThan = function (x) {
@@ -820,4 +873,4 @@ Set.prototype.union = function(setB) {
         union.add(elem);
     }
     return union;
-}
+};

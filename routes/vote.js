@@ -129,6 +129,10 @@ router.post("",(req,res,next) => {
             break;
 
         case "ranked pairs":
+            response = socialChoice.allRankedPairsWinnersWithTrivialTieBreaking(req.body);
+            break;
+
+        case "ranked pairs ranking":
             response = socialWelfare.rankedPairs(req.body);
             break;
 

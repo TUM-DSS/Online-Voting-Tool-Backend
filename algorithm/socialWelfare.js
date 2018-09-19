@@ -3,7 +3,7 @@ const types = require('./answerTypes');
 const socialChoice  = require('./socialChoice');
 const solver = require('javascript-lp-solver');
 const execSync = require('child_process').execSync;
-// const util = require('util');
+const util = require('util');
 const fs = require('fs');
 
 /**
@@ -23,9 +23,10 @@ exports.rankedPairs = function rankedPairs(data) {
         ranking.push(index[dom]);
         index.splice(dom,1);
         data.staircase = helper.stairSplice(data.staircase,dom);
+        // if (data.staircase !== undefined && data.staircase.length > 0) console.log("Staircase is:\n"+util.inspect(helper.getFullMargins(data.staircase)));
     }
 
-    if(index.length == 1) {
+    if(index.length === 1) {
         ranking.push(index[0]);
     }
 
@@ -420,16 +421,18 @@ exports._getPermutations = function getPermutations(size, abortTime) {
  * Find the Schulze Profile of a given data object
  */
 exports.schulze = function schulze(data) {
-    stair = data.staircase;
-    power = helper.getFullMargins(stair).map(arr => arr.map(x => x>0?x:0));
-    size = power.length;
+    let j;
+    let i;
+    let stair = data.staircase;
+    let power = helper.getFullMargins(stair).map(arr => arr.map(x => x > 0 ? x : 0));
+    let size = power.length;
 
     //Use Floyd-Warshall for graph search
-    for (var i = 0; i < size; i++) {
-        for (var j = 0; j < size; j++) {
-            if(i != j) {
-                for (var k = 0; k < size; k++) {
-                    if(i != k && j!=k) {
+    for (i = 0; i < size; i++) {
+        for (j = 0; j < size; j++) {
+            if(i !== j) {
+                for (let k = 0; k < size; k++) {
+                    if(i !== k && j!==k) {
                         power[j][k] = Math.max(power[j][k],Math.min(power[j][i],power[i][k]));
                     }
                 }
@@ -438,28 +441,34 @@ exports.schulze = function schulze(data) {
     }
 
     //Compute the schulze majority margins
-    for (var i = 0; i < size; i++) {
-        for (var j = i+1; j < size; j++) {
+    for (i = 0; i < size; i++) {
+        for (j = i+1; j < size; j++) {
             let si = i;
             let sj = j-(i+1);
             stair[si][sj] = Math.sign(power[i][j] - power[j][i])
         }
     }
 
-    profile = exports._schulzeProfileExtract(stair);
+    let profile = exports._schulzeProfileExtract(stair);
 
-    if(typeof profile == "undefined") {
+    if(typeof profile === "undefined") {
         return {
             success: false,
             msg:"Schulze Method can't find enough dominant edges."
         }
     }
+    let winners = [];
+    let score = helper.getFullMargins(stair).map(arr => arr.reduce((acc,val)=> acc + (val > 0 ? 1 : 0)));
+    let winScore = Math.max(...score);
+    for (i = 0; i < size; i++) if (score[i] === winScore) winners.push(i);
+
     return {
         success:true,
         type: types.Profile,
-        result: profile
+        result: profile,
+        winners: winners
     };
-}
+};
 
 /**
  * Extract the Schulze Preference Profile from its majority margin
@@ -470,10 +479,8 @@ exports._schulzeProfileExtract = function (stair) {
     let profile = [];
 
     while(index.length > 0) {
-        //Iteretively get the best option, remove it from the stair and add it to the profile
-        score = margin.map(arr => arr.reduce((acc,val)=> acc+(val>0?1:0)));
-        max = margin.reduce((iMax, x, i, arr) => x > arr[iMax] ? i : iMax, 0);
-
+        //Iteratively get the best option, remove it from the stair and add it to the profile
+        let max = margin.reduce((iMax, x, i, arr) => x > arr[iMax] ? i : iMax, 0);
         profile.push(index[max]);
         index.splice(max,1);
         margin.splice(max,1);
