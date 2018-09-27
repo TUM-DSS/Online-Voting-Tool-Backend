@@ -2,6 +2,7 @@ const express = require('express');
 const polytope      = require('../algorithm/polytope');
 const socialChoice  = require('../algorithm/socialChoice');
 const socialWelfare = require('../algorithm/socialWelfare');
+const randomAssignment = require('../algorithm/randomAssignment');
 
 const router = express.Router();
 
@@ -134,6 +135,12 @@ router.post("",(req,res,next) => {
 
         case "ranked pairs ranking":
             response = socialWelfare.rankedPairs(req.body);
+            break;
+
+        // Random Assignment
+
+        case "random serial dictatorship":
+            response = randomAssignment.rsd(req.body);
             break;
 
         default:
