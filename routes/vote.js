@@ -143,6 +143,10 @@ router.post("",(req,res,next) => {
             response = randomAssignment.rsd(req.body);
             break;
 
+        case "probabilistic serial rule":
+            response = randomAssignment.ps(req.body);
+            break;
+
         default:
             response = {
                 success: false,
