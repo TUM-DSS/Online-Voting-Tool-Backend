@@ -527,7 +527,49 @@ exports.proportionalBorda = function proportionalBorda(data) {
         score[i] = 1.0 * score[i] / sum;
     }
 
-    console.log(util.inspect(exactLottery));
+    // console.log(util.inspect(exactLottery));
+
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        result: [score],
+        exact: [exactLottery]
+    }
+};
+
+/**
+ * Compute Pluri-Borda lottery
+ */
+exports.pluriBorda = function pluriBorda(data) {
+    let alternatives = data.staircase.length+1;
+    let score = new Array(alternatives).fill(0);
+    let exactLottery = new Array(alternatives).fill([0,1]);
+
+    let profile = data.profile;
+
+    let pluralityScore = new Array(alternatives).fill(0);
+    for (let i = 0; i < profile.length; i++) {
+        pluralityScore[profile[i].relation[0]] += profile[i].numberOfVoters;
+    }
+
+    let sum = 0;
+    for (let i = 0; i < profile.length; i++) {
+        for (let j = 0; j < alternatives; j++) {
+            let alternative = profile[i].relation[j];
+            let points = profile[i].numberOfVoters * (alternatives - j) * pluralityScore[alternative];
+            score[alternative] += points;
+            sum += points;
+        }
+
+    }
+
+    for (let i = 0; i < alternatives; i++) {
+        exactLottery[i] = [score[i], sum];
+        score[i] = 1.0 * score[i] / sum;
+    }
+
+    // console.log(util.inspect(exactLottery));
 
 
     return {

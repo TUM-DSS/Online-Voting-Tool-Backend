@@ -192,5 +192,256 @@ exports.ps = function ps(data) {
 };
 
 /**
- * Popular Random Assignment
+ * Popular Random Assignment by Kavitha et al. https://www.sciencedirect.com/science/article/pii/S0304397510001659
+ * Computing all extreme vertices with David Avis' lrs.
  */
+exports.praAll = function praAll(data) {
+    let size = data.staircase[0].length + 1;
+    let variableSize = size * size + 2*size + 1;
+
+    let profile = data.profile;
+    let voterTypes = profile.length;
+    let voterTypeIndex = [];
+    for (let i = 0; i < voterTypes; i++ ) for (let j = 0; j < profile[i].numberOfVoters; j++) voterTypeIndex.push(i);
+
+    if (size !== voterTypeIndex.length) {
+        return {
+            success: false,
+            msg: "Number of voters and alternatives is not the same"
+        }
+    }
+
+    let name = Math.abs(util.inspect(profile).hashCode());
+    let lp = "Name: " + name +"\n"+"H-representation\n";
+    lp += "linearity "+ (2*size + 1) + " ";
+    for (let i = 1; i <= (2*size + 1); i++ ) lp += i + " ";
+    lp += "\nbegin\n";
+    lp +=  (3*size + 1 + 2 * size * size + 1) + " " + variableSize +" rational\n";
+
+    // Equality constraints (called "linearity" by David Avis)
+    // Lottery constraint for the agents (# constraints: size)
+    for (let a = 0; a < size; a++ ) {
+        let array = new Array(variableSize);
+        array.fill(0);
+        array[0] = -1;
+        for (let i = 0; i < size; i++ ) {
+            array[1+size*a+i] = 1;
+        }
+        lp += array.toString().replace(/,/g," ") + "\n";
+    }
+
+    // Lottery constraint for the items (# constraints: size)
+    for (let i = 0; i < size; i++ ) {
+        let array = new Array(variableSize);
+        array.fill(0);
+        array[0] = -1;
+        for (let a = 0; a < size; a++ ) {
+            array[1+size*a+i] = 1;
+        }
+        lp += array.toString().replace(/,/g," ") + "\n";
+    }
+
+    // Optimality constraint (# constraints: 1)
+    let array = new Array(variableSize);
+    array.fill(0);
+    for (let i = size*size + 1; i < variableSize; i++ ) {
+        array[i] = 1;
+    }
+    lp += array.toString().replace(/,/g," ") + "\n";
+
+    // Inequality constraints
+    // Betas are non-negative (# constraints: size)
+    for (let i = 0; i < size; i++ ) {
+        let array = new Array(variableSize);
+        array.fill(0);
+        array[variableSize-i-1] = 1;
+        lp += array.toString().replace(/,/g," ") + "\n";
+    }
+
+    // Sum of betas is bounded (# constraints: 1)
+    array = new Array(variableSize);
+    array.fill(0);
+    array[0] = size;
+    for (let i = 0; i < size; i++ ) {
+        array[variableSize-i-1] = -1;
+    }
+    lp += array.toString().replace(/,/g," ") + "\n";
+
+    // Lottery constraints (# constraints: size ^ 2)
+    for (let entry = 0; entry < size * size; entry++ ) {
+        let array = new Array(variableSize);
+        array.fill(0);
+        array[1+entry] = 1;
+        lp += array.toString().replace(/,/g," ") + "\n";
+    }
+
+    // Dual PRA constraint (# constraints: size ^ 2)
+    for (let a = 0; a < size; a++ ) for (let h = 0; h < size; h++) {
+        let array = new Array(variableSize);
+        array.fill(0);
+        array[size * size + 1 + a] = 1;
+        array[size * size + size + 1 + h] = 1;
+
+        for (let i = 0; i < size; i++) if (i !== h)
+            array[1 + (a * size) + i] = profile[voterTypeIndex[a]].relation.indexOf(i) < profile[voterTypeIndex[a]].relation.indexOf(h) ? 1 : -1;
+
+        lp += array.toString().replace(/,/g, " ") + "\n";
+    }
+
+    lp += "end\n";
+
+    // Minimize sum of betas (for the first vertex)
+    array = new Array(variableSize);
+    array.fill(0);
+    for (let i = 0; i < size; i++ ) {
+        array[variableSize-i-1] = 1;
+    }
+    lp += "dualperturb\n" + "minimize " + array.toString().replace(/,/g," ") + "\n";
+    // lp += "maxoutput " + 7 + "\n";
+    // lp += "maxcobases " + 100 + "\n";
+    // lp += "truncate \n";
+
+    console.log(lp);
+
+    let fileName = "lrs/PRA.LP.for.ID."+name+".ine";
+    fs.writeFileSync(fileName, lp); // Write the file SYNCHRONOUSLY (!)
+
+
+    let output = execSync('./lrs/lrs ' + fileName, {stdio:[]}).toString();
+    execSync('rm '+fileName); // Delete the temporary file
+
+
+    console.log(output);
+
+    return {
+        success: false,
+        msg: "We have not finished yet with computing all vertices."
+    }
+
+    return {
+        success: true,
+        type: types.Matrices,
+        result: matrices
+    }
+};
+
+/**
+ * Popular Random Assignment by Kavitha et al. https://www.sciencedirect.com/science/article/pii/S0304397510001659
+ * Computing some assignment with LP solver
+ */
+exports.pra = function pra(data) {
+    let size = data.staircase[0].length + 1;
+    let variableSize = size * size + 2 * size + 1;
+
+    let profile = data.profile;
+    let voterTypes = profile.length;
+    let voterTypeIndex = [];
+    for (let i = 0; i < voterTypes; i++) for (let j = 0; j < profile[i].numberOfVoters; j++) voterTypeIndex.push(i);
+
+    if (size !== voterTypeIndex.length) {
+        return {
+            success: false,
+            msg: "Number of voters and alternatives is not the same"
+        }
+    }
+
+    let matrix = new Array(size);
+    for (let i = 0; i < size; i++ ) {
+        matrix[i] = [];
+        for (let j = 0; j < size; j++ ) {
+            matrix[i][j] = math.fraction(0);
+        }
+    }
+
+
+    // LP model
+    // SoPlex refuses to accept negative solution values.
+    // We use a workaround by shifting all alphas by "size"
+    let model =  "Minimize\n" + "0\n" + "Subject To\n";
+
+    // Equality constraints
+    // Lottery constraint for the agents (# constraints: size)
+    for (let i = 0; i < size; i++) {
+        let sum = "";
+        for (let h = 0; h < size; h++) sum += " p_" + i + "_" + h + " +";
+        model += sum.slice(0, -1) + " = 1\n";
+    }
+
+    // Lottery constraint for the items (# constraints: size)
+    for (let h = 0; h < size; h++) {
+        let sum = "";
+        for (let i = 0; i < size; i++) sum += " p_" + i + "_" + h + " +";
+        model += sum.slice(0, -1) + " = 1\n";
+    }
+
+    // Optimality constraint (# constraints: 1)
+    let sum = "";
+    for (let i = 0; i < size; i++) {
+        sum += " alpha_" + i + " + beta_" + i +" +";
+    }
+    model += sum.slice(0, -1) + " = " + (size*size) + "\n";
+
+    // Inequality constraints
+    // Betas are non-negative (# constraints: size)
+    for (let h = 0; h < size; h++) model += " beta_" + h + " >= 0\n";
+
+    // Sum of betas is bounded (# constraints: 1)
+    // sum = "";
+    // for (let i = 0; i < size; i++) {
+    //     sum += " beta_" + i +" +";
+    // }
+    // model += sum.slice(0, -1) + " <= " + size + "\n";
+
+
+    // Lottery constraints (# constraints: size ^ 2)
+    for (let h = 0; h < size; h++) for (let i = 0; i < size; i++) model += " p_" + i + "_" + h + " >= 0\n";
+
+    // Dual PRA constraint (# constraints: size ^ 2)
+    for (let a = 0; a < size; a++ ) for (let h = 0; h < size; h++) {
+        sum = " alpha_"+a + " + beta_"+h + " ";
+        for (let i = 0; i < size; i++) if (i !== h)
+            sum += (profile[voterTypeIndex[a]].relation.indexOf(i) < profile[voterTypeIndex[a]].relation.indexOf(h) ? "+" : "-") + " p_" + a + "_" + i +" ";
+
+        model += sum +" >= " + size + "\n";
+    }
+
+    model += "end\n";
+
+    // SoPlex Solving
+    let fileName = "SCIP/PRA.for.model.ID." + model.hashCode() + ".lp";
+    fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
+
+    // console.log(model);
+
+    // Solving:
+    // ./SCIP/bin/soplex --loadset=SCIP/bin/exact.set SCIP/problem.lp -X
+    let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X').toString();
+    execSync('rm '+fileName); // Delete the temporary file
+
+    for (let i = 0; i < size; i++) for (let h = 0; h < size; h++) {
+        let name = "p_" + i + "_" + h;
+    }
+
+    for (let line of output.split('\n')) {
+        if (line.startsWith("p_")) {
+            let splitLine = line.split("\t");
+            console.log(util.inspect(splitLine));
+            let ids = splitLine[0].replace(/\t/g,'').split("_");
+            matrix[parseInt(ids[1])][parseInt(ids[2])] = math.fraction(splitLine[1].replace(/\t/g,''));
+        }
+    }
+
+
+    // Convert from fraction to pair
+    for (let i = 0; i < size; i++ ) {
+        for (let j = 0; j < size; j++ ) {
+            matrix[i][j] = [matrix[i][j]["n"], matrix[i][j]["d"]];
+        }
+    }
+
+    return {
+        success: true,
+        type: types.Matrix,
+        result: matrix
+    }
+};

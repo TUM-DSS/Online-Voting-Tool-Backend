@@ -32,6 +32,10 @@ router.post("",(req,res,next) => {
             response = polytope.proportionalBorda(req.body);
             break;
 
+        case "pluri-borda":
+            response = polytope.pluriBorda(req.body);
+            break;
+
         // Social Choice Functions
 
         case "essential set":
@@ -145,6 +149,10 @@ router.post("",(req,res,next) => {
 
         case "probabilistic serial rule":
             response = randomAssignment.ps(req.body);
+            break;
+
+        case "popular random assignment":
+            response = randomAssignment.pra(req.body);
             break;
 
         default:
