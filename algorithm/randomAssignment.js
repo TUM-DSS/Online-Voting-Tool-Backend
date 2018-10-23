@@ -405,6 +405,12 @@ exports.pra = function pra(data) {
         model += sum +" >= " + size + "\n";
     }
 
+    // Equal treatment of equals (# constraints: size * # pairs of equal preferences)
+    for (let v1 = 0; v1 < size; v1++) for (let v2 = v1 + 1; v2 < size; v2++)
+        if (profile[voterTypeIndex[v1]].relation === profile[voterTypeIndex[v2]].relation)
+            for (let a = 0; a < size; a++)
+                model += " p_" + v1 + "_" + a + " - p_" + v2 + "_" + a + "  = 0\n";
+
     model += "end\n";
 
     // SoPlex Solving
@@ -425,7 +431,6 @@ exports.pra = function pra(data) {
     for (let line of output.split('\n')) {
         if (line.startsWith("p_")) {
             let splitLine = line.split("\t");
-            console.log(util.inspect(splitLine));
             let ids = splitLine[0].replace(/\t/g,'').split("_");
             matrix[parseInt(ids[1])][parseInt(ids[2])] = math.fraction(splitLine[1].replace(/\t/g,''));
         }
