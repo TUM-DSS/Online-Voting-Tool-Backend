@@ -17,18 +17,31 @@ router.post("",(req,res,next) => {
     let lotteries = req.body.lotteries;
     let exact = req.body.exact;
     let profile = req.body.profile;
+    let response;
 
-    let response = (exact !== undefined) ?
-        {
-            success: true,
-            sdresult: exactlyCheckSDEfficiency(exact,profile),
-            pcresult: exactlyCheckPCEfficiency(exact,profile)
-        }  :
-        {
-        success: true,
-        sdresult: checkSDEfficiency(lotteries,profile),
-        pcresult: checkPCEfficiency(lotteries,profile)
-    };
+    if (lotteries === "Matrix") {
+        // TODO: Implement envyfreeness check
+        // TODO: Implement popularity check
+        response = {
+                success: true,
+                sdresult: assignmentCheckSDEfficiency(exact,profile),
+                pcresult: assignmentCheckPCEfficiency(exact,profile)
+            };
+    }
+    else {
+        response = (exact !== undefined) ?
+            {
+                success: true,
+                sdresult: exactlyCheckSDEfficiency(exact,profile),
+                pcresult: exactlyCheckPCEfficiency(exact,profile)
+            }  :
+            {
+                success: true,
+                sdresult: checkSDEfficiency(lotteries,profile),
+                pcresult: checkPCEfficiency(lotteries,profile)
+            };
+    }
+
     // console.log("Response",util.inspect(response));
     res.send(response);
 });
@@ -68,6 +81,20 @@ function exactlyCheckPCEfficiency(exactLotteries,profile) {
         let model = _getExactPairwiseComparisonLP(lottery,profile);
         out.push(_getExactLotteryFromLPSolution(lottery, model));
     }
+    return out;
+}
+
+function assignmentCheckSDEfficiency(bistochasticMatrix,profile) {
+    let out = [];
+    let model = _getAssignmentStochasticDominanceLP(bistochasticMatrix,profile);
+    out.push(_getExactLotteryFromLPSolution(bistochasticMatrix, model));
+    return out;
+}
+
+function assignmentCheckPCEfficiency(bistochasticMatrix,profile) {
+    let out = [];
+    let model = _getAssignmentPairwiseComparisonLP(bistochasticMatrix,profile);
+    out.push(_getExactLotteryFromLPSolution(bistochasticMatrix, model));
     return out;
 }
 
@@ -144,7 +171,7 @@ function _getExactLotteryFromLPSolution(lottery,model) {
         if (line.includes("[optimal]")) {
             feasible = true;
         }
-        if (feasible && solutionArea) {
+        if (feasible && solutionArea && !line.includes("All other variables are zero") && line.includes("\t")) {
             let splitLine = line.split("\t");
             solutionMap[splitLine[0]] = splitLine[1];
         }
@@ -152,7 +179,6 @@ function _getExactLotteryFromLPSolution(lottery,model) {
     }
 
     if(feasible) {
-
         if(solutionMap["epsilon"] === "0") {
             return {
                 success: true,
@@ -161,31 +187,47 @@ function _getExactLotteryFromLPSolution(lottery,model) {
         } else {
             let i;
             let dominator = [];
+            let matrix = false;
 
-            //Extract the lottery from the LP solution
-            for (i = 0; i < lottery.length; i++) {
-                if(solutionMap[_qLotteryName(i)] !== undefined) {
-                    let solutionString  = solutionMap[_qLotteryName(i)];
-                    if (solutionString.includes("/")){
-                        let solutionArray = solutionString.split("/");
-                        dominator.push([parseInt(solutionArray[0]),parseInt(solutionArray[1])]);
+            if (lottery[0][0][0] !== undefined) {
+                matrix = true;
+                //Extract the bistochastic matrix from the LP solution
+                for (let v = 0; v < lottery.length; v++) {
+                    for (i = 0; i < lottery.length; i++) {
+                        if(solutionMap[_qMatrixEntry(v,i)] !== undefined) {
+                            let solutionString  = solutionMap[_qMatrixEntry(v,i)];
+                            if (solutionString.includes("/")){
+                                let solutionArray = solutionString.split("/");
+                                dominator.push([parseInt(solutionArray[0]),parseInt(solutionArray[1])]);
+                            }
+                            else dominator.push([1,1]);
+                        } else dominator.push([0, 1]);
                     }
-
-                    else
-                        dominator.push([1,0]);
-                } else {
-                    dominator.push([0,1]);
+                }
+            } else {
+                //Extract the lottery from the LP solution
+                for (i = 0; i < lottery.length; i++) {
+                    if(solutionMap[_qLotteryName(i)] !== undefined) {
+                        let solutionString  = solutionMap[_qLotteryName(i)];
+                        if (solutionString.includes("/")){
+                            let solutionArray = solutionString.split("/");
+                            dominator.push([parseInt(solutionArray[0]),parseInt(solutionArray[1])]);
+                        }
+                        else dominator.push([1,1]);
+                    } else dominator.push([0, 1]);
                 }
             }
 
             return {
                 success: true,
                 efficient: false,
+                isMatrix: matrix,
+                sizeOfResult: lottery.length,
                 dominator: dominator
             }
         }
     } else {
-        console.log("Failed",output);
+        // console.log("Failed",output);
         return {
             success: false,
             msg: "LP infeasible"
@@ -304,6 +346,78 @@ function _getExactPairwiseComparisonLP(lottery,preferenceProfile) {
 
         if(constraint.length > 0) {
             model += constraint+ " -1 "+_getEpsilonName(i)+" >= 0\n";
+        }
+    }
+    model += "END";
+    return model;
+}
+
+/**
+ *  Get the LP for exactly checking PC efficiency (for the assignment case)
+ */
+function _getAssignmentPairwiseComparisonLP(bistochasticMatrix,preferenceProfile) {
+    let nrOfCandidates = bistochasticMatrix.length;
+    let nrOfVoters = preferenceProfile.length;
+
+    let model = "Maximize\n" + "epsilon\n" + "Subject To\n";
+
+    //max  sum_(v in voters) e_v
+    let rGoal = "";
+    for (let v = 0; v < nrOfVoters; v++) {
+        rGoal+=( v===0 ? "  " : "+ ")+_getEpsilonName(v)+" ";
+    }
+    model += rGoal + " - epsilon = 0\n";
+
+    //forall v e_v >= 0
+    for (let v = 0; v < nrOfVoters; v++) {
+        model += _getEpsilonName(v)+" >= 0\n";
+    }
+
+    // q is non-negative
+    for (let v=0; v < nrOfVoters; v++) {
+        for (let i = 0; i < nrOfCandidates; i++) {
+            model += _qMatrixEntry(v,i)+" >= 0\n";
+        }
+    }
+
+    // q is a lottery (for every voter)
+    for (let v=0; v < nrOfVoters; v++) {
+        let constraint = "";
+        for (let i = 0; i < nrOfCandidates; i++) {
+            constraint += " + "+_qMatrixEntry(v,i)+" ";
+        }
+        model += constraint+" = 1\n";
+    }
+
+    // q is a lottery (for every item)
+    for (let i = 0; i < nrOfCandidates; i++) {
+        let constraint = "";
+        for (let v=0; v < nrOfVoters; v++) {
+            constraint += " + "+_qMatrixEntry(v,i)+" ";
+        }
+        model += constraint+" = 1\n";
+    }
+
+    for (let v = 0; v < nrOfVoters; v++) {
+        // sum_(x >=_v i) (q(v,x)p(v,i)-q(v,i)p(v,x))  - e(v) >= 0 forall voters v, item i
+        let constraint = "";
+
+        let qIndex = Array.from(new Array(nrOfCandidates), (x,i) => 0);
+
+        for (let i = 0; i < nrOfCandidates; i++) {
+            for(let xind = preferenceProfile[v].indexOf(i)-1; xind > -1; xind--) {
+                let x = preferenceProfile[v][xind];
+                //p(v,i)q(v,xx)
+                if (bistochasticMatrix[v][i][0] !== 0 )
+                    constraint += " + " + bistochasticMatrix[v][i][0] + "/"  + bistochasticMatrix[v][i][1] +"  "+_qMatrixEntry(v,x)+" ";
+                // -p(v,x)q(v,i)
+                if (bistochasticMatrix[v][x][0] !== 0)
+                    constraint += " - " + bistochasticMatrix[v][x][0] + "/"  + bistochasticMatrix[v][x][1] +"  "+_qMatrixEntry(v,i)+" ";
+            }
+        }
+
+        if(constraint.length > 0) {
+            model += constraint+ " -1 "+_getEpsilonName(v)+" >= 0\n";
         }
     }
     model += "END";
@@ -432,10 +546,91 @@ function _getExactStochasticDominanceLP(lottery,preferenceProfile) {
     return model;
 }
 
+/**
+ * Get the LP for exactly checking SD efficiency (in the assignment case)
+ */
+function _getAssignmentStochasticDominanceLP(bistochasticMatrix,preferenceProfile) {
+    let nrOfCandidates = bistochasticMatrix.length;
+    let nrOfVoters = preferenceProfile.length;
+
+    let model = "Maximize\n" + "epsilon\n" + "Subject To\n";
+
+    //Goal function
+    // max sum_(i in voters) sum_(j in candidates) r_(i,j)
+    let rGoal = "";
+    for (let i=0; i < nrOfVoters; i++) {
+        for (let j=0; j< nrOfCandidates; j++) {
+            rGoal += (i === 0 && j === 0 ? "" : " + ")+_rMatrixName(i,j)+" ";
+        }
+    }
+
+    model += rGoal + " - epsilon = 0\n";
+
+    //Constraint 1  sum {y (>=pref_v) j} (q_v_y - r_v,j) = sum {y (>=pref_v) j} p_v_y
+    for (let v=0; v < nrOfVoters; v++) {
+        for (let j=0; j< nrOfCandidates; j++) {
+
+            let value = math.fraction('0');
+            let constraint = "";
+
+            let count = 0;
+            for(let y=preferenceProfile[v].indexOf(j); y > -1; y--) {
+                let fractionPair = bistochasticMatrix[v][ preferenceProfile[v][y] ];
+                value = math.add(value, math.fraction(fractionPair[0],fractionPair[1]));
+                constraint += "+ "+_qMatrixEntry(v,preferenceProfile[v][y])+" ";
+                count--;
+            }
+            constraint += count+" "+_rMatrixName(v,j)+" ";
+            model += constraint + " = " + value["n"] + "/" + value["d"] + "\n";
+        }
+    }
+
+
+    // q is non-negative
+    for (let v=0; v < nrOfVoters; v++) {
+        for (let i = 0; i < nrOfCandidates; i++) {
+            model += _qMatrixEntry(v,i)+" >= 0\n";
+        }
+    }
+
+    // q is a lottery (for every voter)
+    for (let v=0; v < nrOfVoters; v++) {
+        let constraint = "";
+        for (let i = 0; i < nrOfCandidates; i++) {
+            constraint += " + "+_qMatrixEntry(v,i)+" ";
+        }
+        model += constraint+" = 1\n";
+    }
+
+    // q is a lottery (for every item)
+    for (let i = 0; i < nrOfCandidates; i++) {
+        let constraint = "";
+        for (let v=0; v < nrOfVoters; v++) {
+            constraint += " + "+_qMatrixEntry(v,i)+" ";
+        }
+        model += constraint+" = 1\n";
+    }
+
+
+    // all auxiliary epsilons are non-negative
+    for (let i=0; i < nrOfVoters; i++) {
+        for (let j=0; j< nrOfCandidates; j++) {
+            model += _rMatrixName(i,j)+" >= 0\n";
+        }
+    }
+    model += "END";
+
+    return model;
+}
+
 function _rMatrixName(voter,candidate) {
     return "r_"+voter+"_"+candidate;
 }
 
 function _qLotteryName(candidate) {
     return "q_"+candidate;
+}
+
+function _qMatrixEntry(voter, candidate) {
+    return "q_"+voter+"_"+candidate;
 }
