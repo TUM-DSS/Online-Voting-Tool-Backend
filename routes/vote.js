@@ -96,6 +96,7 @@ router.post("",(req,res,next) => {
 
         case "condorcet":
         case "weak condorcet":
+        case "majority winner":
             response = socialChoice.condorcet(req.body);
             break;
 

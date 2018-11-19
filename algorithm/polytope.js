@@ -515,19 +515,18 @@ exports.proportionalBorda = function proportionalBorda(data) {
     let sum = 0;
     for (let i = 0; i < profile.length; i++) {
         for (let j = 0; j < alternatives; j++) {
-            let points = profile[i].numberOfVoters * (alternatives - j);
+            let points = profile[i].numberOfVoters * (alternatives - j - 1);
             score[profile[i].relation[j]] += points;
             sum += points;
         }
-
     }
+
+    // console.log(util.inspect(score));
 
     for (let i = 0; i < alternatives; i++) {
         exactLottery[i] = [score[i], sum];
         score[i] = 1.0 * score[i] / sum;
     }
-
-    // console.log(util.inspect(exactLottery));
 
 
     return {
@@ -554,14 +553,16 @@ exports.pluriBorda = function pluriBorda(data) {
     }
 
     let sum = 0;
-    for (let i = 0; i < profile.length; i++) {
-        for (let j = 0; j < alternatives; j++) {
-            let alternative = profile[i].relation[j];
-            let points = profile[i].numberOfVoters * (alternatives - j) * pluralityScore[alternative];
-            score[alternative] += points;
-            sum += points;
+    for (let v = 0; v < profile.length; v++) {
+        for (let i = 0; i < alternatives; i++) {
+            for (let j = i+1; j < alternatives; j++) {
+                let upperAlternative = profile[v].relation[i];
+                let lowerAlternative = profile[v].relation[j];
+                let points = profile[v].numberOfVoters * pluralityScore[lowerAlternative];
+                score[upperAlternative] += points;
+                sum += points;
+            }
         }
-
     }
 
     for (let i = 0; i < alternatives; i++) {

@@ -623,6 +623,20 @@ exports.condorcet = function condorcet(data) {
     if(condorcet>=0) {
         winners.push(condorcet);
         tooltip = "Strict Condorcet Winner!";
+
+        // Test for majority winner
+        let alternatives = data.staircase.length+1;
+        let pluralityScore = new Array(alternatives).fill(0);
+
+        let profile = data.profile;
+        let sum = 0;
+        for (let i = 0; i < profile.length; i++) {
+            pluralityScore[profile[i].relation[0]] += profile[i].numberOfVoters;
+            sum += profile[i].numberOfVoters;
+        }
+
+        if(pluralityScore[condorcet] > sum / 2.0)
+            tooltip = "Majority Winner!";
     }
     else if (weakCondorcet >= 0) {
         tooltip = "Weak Condorcet Winners!";
