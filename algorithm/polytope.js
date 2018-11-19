@@ -552,18 +552,25 @@ exports.pluriBorda = function pluriBorda(data) {
         pluralityScore[profile[i].relation[0]] += profile[i].numberOfVoters;
     }
 
+    console.log("Plurality: "+util.inspect(pluralityScore));
+
     let sum = 0;
     for (let v = 0; v < profile.length; v++) {
         for (let i = 0; i < alternatives; i++) {
+            let upperAlternative = profile[v].relation[i];
+            // No half points allowed, thus we double all points
+            let reflexivePoints = pluralityScore[upperAlternative];
+            score[upperAlternative] += reflexivePoints;
+            sum += reflexivePoints;
             for (let j = i+1; j < alternatives; j++) {
-                let upperAlternative = profile[v].relation[i];
                 let lowerAlternative = profile[v].relation[j];
-                let points = profile[v].numberOfVoters * pluralityScore[lowerAlternative];
+                let points = profile[v].numberOfVoters * 2 * pluralityScore[lowerAlternative];
                 score[upperAlternative] += points;
                 sum += points;
             }
         }
     }
+    console.log("Pluri-Borda Scores: "+util.inspect(score));
 
     for (let i = 0; i < alternatives; i++) {
         exactLottery[i] = [score[i], sum];
