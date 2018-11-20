@@ -559,7 +559,7 @@ exports.pluriBorda = function pluriBorda(data) {
         for (let i = 0; i < alternatives; i++) {
             let upperAlternative = profile[v].relation[i];
             // No half points allowed, thus we double all points
-            let reflexivePoints = pluralityScore[upperAlternative];
+            let reflexivePoints = profile[v].numberOfVoters * pluralityScore[upperAlternative];
             score[upperAlternative] += reflexivePoints;
             sum += reflexivePoints;
             for (let j = i+1; j < alternatives; j++) {
