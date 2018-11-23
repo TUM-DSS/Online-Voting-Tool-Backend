@@ -104,6 +104,10 @@ router.post("",(req,res,next) => {
             response = socialChoice.pareto(req.body);
             break;
 
+        case "mixed efficient":
+            response = socialChoice.mixedDominance(req.body);
+            break;
+
         case "copeland":
             response = socialChoice.copeland(req.body);
             break;

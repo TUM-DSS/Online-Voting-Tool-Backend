@@ -2,6 +2,8 @@ const helper = require('./helper');
 const types = require('./answerTypes');
 const priorityQueue = require('./priorityQueue');
 const util = require('util');
+const fs = require('fs');
+const execSync = require('child_process').execSync;
 
 /**
  * Computes the social choice function (except essentialSet)
@@ -698,6 +700,71 @@ exports.pareto = function pareto(data) {
         success: true,
         type: types.Lotteries,
         tooltip: tooltip,
+        result: helper.getWinnerLotteries(winners,margin.length)
+    }
+};
+
+/**
+ * Compute the mixed Dominance - undominated alternatives
+ */
+exports.mixedDominance = function mixedDominance(data) {
+    let margin = helper.getFullMargins(data.staircase);
+    let alternatives = data.staircase.length+1;
+
+    let winners = [];
+
+    for (let a = 0; a < alternatives; a++) {
+        let model = "Maximize\n" + "epsilon\n" + "Subject To\n";
+
+        // weights are non-negative
+        for (let b = 0; b < alternatives; b++) model += " w_" + b + " >= 0\n";
+
+        // weights are a lottery
+        let constraint = "";
+        for (let b = 0; b < alternatives; b++) constraint += (constraint === "" ? "" : " + ") + " w_" + b;
+        model += constraint+" = 1\n";
+
+        for (let b = 0; b < alternatives; b++) {
+            let constraint = "";
+            for (let e = 0; e < alternatives; e++) {
+                constraint += (constraint === "" ? "" : " + ") + margin[e][b] + " w_" + e;
+            }
+            model += constraint + " - epsilon >= " + margin[a][b] + "\n";
+        }
+        model += "END";
+
+        // console.log(model);
+
+        let fileName = "SCIP/Mixed.Dominance.for.model.ID."+model.hashCode()+".lp";
+        fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
+        let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
+        execSync('rm '+fileName); // Delete the temporary file
+
+        let solutionMap = { epsilon: "0"};
+        let solutionArea = false;
+        let feasible = false;
+        for (let line of output.split('\n')) {
+            // console.log(line);
+            if (line.includes("[infeasible]") || line.includes("[unspecified]") || line.includes("[time limit reached]")) {
+                break;
+            }
+            if (line.includes("[optimal]")) {
+                feasible = true;
+            }
+            if (feasible && solutionArea && !line.includes("All other variables are zero") && line.includes("\t")) {
+                // console.log(line);
+                let splitLine = line.split("\t");
+                solutionMap[splitLine[0]] = splitLine[1];
+            }
+            else if (line.includes("Primal solution (name, value):")) solutionArea = true;
+        }
+        if (feasible && solutionMap["epsilon"] === "0") winners.push(a);
+    }
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        // tooltip: "",
         result: helper.getWinnerLotteries(winners,margin.length)
     }
 };
