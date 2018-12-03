@@ -70,6 +70,7 @@ router.post("",(req,res,next) => {
             response = socialChoice.coombs(req.body);
             break;
 
+        case "ultimate scoring winner":
         case "borda":
             response = socialChoice.borda(req.body);
             break;

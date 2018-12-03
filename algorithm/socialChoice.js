@@ -34,12 +34,90 @@ exports.borda = function borda(data) {
     let winScore = Math.max(...score);
     //Get all candidates with highest score
     let winner = score.reduce((p,c,i,a) => c ===  winScore ? p.concat(i) : p,[]);
-    lotteries = helper.getWinnerLotteries(winner,voteSize);
+    let lotteries = helper.getWinnerLotteries(winner, voteSize);
+
+    // Test for ultimate scoring winner
+    if (winner.length === 1) {
+        let ultimateCandidate = winner[0];
+        // Pretest: Plurality:
+        let pluralityScore = new Array(voteSize).fill(0);
+
+        let profile = data.profile;
+        for (let i = 0; i < profile.length; i++) {
+            pluralityScore[profile[i].relation[0]] += profile[i].numberOfVoters;
+        }
+        //Find highest Plurality Score
+        let pluralityWinScore = Math.max(...pluralityScore);
+        let pluralityWinner = pluralityScore.reduce((p,c,i,a) => c ===  pluralityWinScore ? p.concat(i) : p,[]);
+
+        if (pluralityWinner.length === 1 && ultimateCandidate === pluralityWinner[0]) {
+            //Check via LPs if the candidate is (really) the ultimate scoring rule winner
+            for (let competitor = 0; competitor < voteSize; competitor++) if (competitor !== ultimateCandidate) {
+                let model = "Maximize\n" + "0\n" + "Subject To\n";
+
+                // weights are non-negative
+                for (let b = 0; b < voteSize; b++) model += " w_" + b + " >= 0\n";
+
+                // weights are monotone
+                for (let b = 1; b < voteSize; b++) model += " w_" + (b-1) + " - w_" + b +" >= 0\n";
+
+                // weights are non-trivial
+                model += " w_0 - w_" + (voteSize-1) +" >= 1\n";
+
+                // Comparision of scores of competitor and ultimateCandidate
+                let difference = "";
+                for (let voterType = 0; voterType < profile.length; voterType++) {
+                    for (let rank = 0; rank < voteSize; rank++) {
+                        let recentAlternative = profile[voterType].relation[rank];
+                        if (recentAlternative === competitor) {
+                            difference += (difference === "" ? "" : " + ") + profile[voterType].numberOfVoters + " w_" + rank;
+                        }
+                        if (recentAlternative === ultimateCandidate) {
+                            difference += " - " + profile[voterType].numberOfVoters + " w_" + rank;
+                        }
+                    }
+                }
+                model += difference + " >= 0\n";
+
+                model += "END";
+
+                // console.log(model);
+
+                let fileName = "SCIP/Ultimate.Scoring.Winner.for.model.ID."+model.hashCode()+".lp";
+                fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
+                let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
+                execSync('rm '+fileName); // Delete the temporary file
+
+                for (let line of output.split('\n')) {
+                    // console.log(line);
+                    if (line.includes("[infeasible]") || line.includes("[unspecified]") || line.includes("[time limit reached]")) {
+                        break;
+                    }
+                    if (line.includes("[optimal]")) {
+                        // The candidate is not an ultimate scoring winner because "competitor" may be better
+                        return {
+                            success: true,
+                            type: types.Lotteries,
+                            tooltip: "Borda scores: "+score,
+                            result: lotteries
+                        }
+                    }
+                }
+            }
+
+            return {
+                success: true,
+                type: types.Lotteries,
+                tooltip: "Ultimate scoring rule winner with Borda scores: "+score,
+                result: lotteries
+            }
+        }
+    }
 
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Scores: "+score,
+        tooltip: "Borda scores: "+score,
         result: lotteries
     }
 };
@@ -605,9 +683,10 @@ exports.black = function black(data) {
             result: helper.getWinnerLotteries([condorcet],margin.length)
         }
     }
-
-    return exports.borda(data);
-}
+    let bordaResult = exports.borda(data);
+    bordaResult.tooltip = "Black: " + bordaResult.tooltip;
+    return bordaResult;
+};
 
 /**
  * Compute the Condorcet winner of a given data object (or all alternatives if there is none)
