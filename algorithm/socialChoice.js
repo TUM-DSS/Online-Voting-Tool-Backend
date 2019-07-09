@@ -791,6 +791,7 @@ exports.mixedDominance = function mixedDominance(data) {
     let alternatives = data.staircase.length+1;
 
     let winners = [];
+    let tooltip = "Dominations:"+'/n';
 
     for (let a = 0; a < alternatives; a++) {
         let model = "Maximize\n" + "epsilon\n" + "Subject To\n";
@@ -833,17 +834,30 @@ exports.mixedDominance = function mixedDominance(data) {
             if (feasible && solutionArea && !line.includes("All other variables are zero") && line.includes("\t")) {
                 // console.log(line);
                 let splitLine = line.split("\t");
-                solutionMap[splitLine[0]] = splitLine[1];
+                for (let s = 0; s < splitLine.length; s = s+2) {
+                    solutionMap[splitLine[s]] = splitLine[s+1];
+                }
             }
             else if (line.includes("Primal solution (name, value):")) solutionArea = true;
         }
-        if (feasible && solutionMap["epsilon"] === "0") winners.push(a);
+        if (feasible && solutionMap["epsilon"] === "0") {
+            winners.push(a);
+            // tooltip += "-"+'/n';
+        }
+        else {
+            let fresh = true;
+            for (let i = 0; i < alternatives; i++) {
+                tooltip += (fresh ? "" : ", ")+(solutionMap.hasOwnProperty("w_"+i) ? solutionMap["w_"+i]+"" : "0");
+                fresh = false;
+            }
+            tooltip += '/n';
+        }
     }
 
     return {
         success: true,
         type: types.Lotteries,
-        // tooltip: "",
+        tooltip: winners.length === alternatives ? "" : tooltip,
         result: helper.getWinnerLotteries(winners,margin.length)
     }
 };

@@ -163,10 +163,11 @@ function extract (staircase) {
     // Start with the largest margin as the first try for the minimal number of voters
     let maxRow = margin.map(function(row){ return Math.max.apply(Math, row); });
     let n = Math.max.apply(null, maxRow);
-    // Start with the largest sum of the weights of a three-cycle
+    // Start with the largest sum of the weights of any three-cycle
+    // Improvement by Florian: Also take into account negative weights, i.e., three-cycles which are actually transitive
     for (let i = 0; i < size; i++) {
-        for (let j = 0; j < size; j++) if (margin[i][j] > 0) {
-            for (let k = 0; k < size; k++) if (margin[j][k] > 0 && margin[k][i] > 0) {
+        for (let j = 0; j < size; j++) { // if (margin[i][j] > 0)
+            for (let k = 0; k < size; k++) { // if (margin[j][k] > 0 && margin[k][i] > 0)
                 let sum = margin[i][j] + margin[j][k] + margin[k][i];
                 if (n < sum) n = sum;
             }
