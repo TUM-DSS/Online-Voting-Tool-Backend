@@ -760,25 +760,24 @@ exports.pareto = function pareto(data) {
     }
 
     let winners = [];
-    let tooltip = "Dominations: ";
+    let tooltip = "Dominations:/n";
 
     // Check for Pareto domination
     xLoop:
     for (let x = 0; x < margin.length; x++) {
         for (let y = 0; y < margin.length; y++) {
             if (margin[y][x] === numberOfVoters) {
-                tooltip += y + ", ";
+                tooltip += "Alternative_"+x+" dominated by Alternative_"+y + "/n";
                 continue xLoop;
             }
         }
         winners.push(x);
-        tooltip += "-, ";
     }
 
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: tooltip,
+        tooltip: winners.length === data.staircase.length+1 ? "" : tooltip,
         result: helper.getWinnerLotteries(winners,margin.length)
     }
 };
@@ -813,8 +812,6 @@ exports.mixedDominance = function mixedDominance(data) {
         }
         model += "END";
 
-        // console.log(model);
-
         let fileName = "SCIP/Mixed.Dominance.for.model.ID."+model.hashCode()+".lp";
         fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
         let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
@@ -840,14 +837,13 @@ exports.mixedDominance = function mixedDominance(data) {
             }
             else if (line.includes("Primal solution (name, value):")) solutionArea = true;
         }
-        if (feasible && solutionMap["epsilon"] === "0") {
-            winners.push(a);
-            // tooltip += "-"+'/n';
-        }
+        if (feasible && solutionMap["epsilon"] === "0") winners.push(a);
         else {
+            tooltip += "Alternative_"+a+" dominated by: ";
             let fresh = true;
-            for (let i = 0; i < alternatives; i++) {
-                tooltip += (fresh ? "" : ", ")+(solutionMap.hasOwnProperty("w_"+i) ? solutionMap["w_"+i]+"" : "0");
+            for (let i = 0; i < alternatives; i++) if (solutionMap.hasOwnProperty("w_" + i)) {
+                let coefficient = solutionMap["w_" + i];
+                tooltip += (fresh ? "" : " + ") + ((coefficient !== "1" ? coefficient : "") + " Alternative_" + i);
                 fresh = false;
             }
             tooltip += '/n';
