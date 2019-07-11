@@ -689,6 +689,106 @@ exports.black = function black(data) {
 };
 
 /**
+ * Compute the Young winner of a given data object
+ */
+exports.young = function young(data) {
+    let alternativeSize = data.staircase.length+1;
+    let margin = helper.getFullMargins(data.staircase);
+
+    let profile = data.profile;
+    let numberOfTypes = profile.length;
+
+    let tooltip = "";
+    let winners = [];
+
+    // If there is a Condorcet winner, we do not need to set up any ILP
+    //Check if there is a candidate strictly preferred by everyone
+    //Remove the diagonal of the matrix and look for positive rows
+    let copyOfMargin = JSON.parse(JSON.stringify(margin));
+    copyOfMargin.forEach( (arr,i) => {arr.splice(i,1);return arr});
+    let condorcet = copyOfMargin.findIndex(arr => arr.every(e => e>0));
+    //if there is one return it
+    if(condorcet>=0) {
+        return {
+            success: true,
+            type: types.Lotteries,
+            result: helper.getWinnerLotteries([condorcet],margin.length)
+        }
+    }
+
+    let currentLowest = Number.MAX_SAFE_INTEGER;
+
+    // Iteratively compute how many voters need to be removed to make each alternative a Condorcet winner
+    for (let c = 0; c < alternativeSize; c++) {
+        let model = "Minimize\n" + "sum\n" + "Subject To\n";
+
+        // Number of voters to remove is non-negative for each type
+        for (let t = 0; t < numberOfTypes; t++) model += " t_" + t + " >= 0\n";
+
+        // Number of voters to remove for each type is smaller or equal to number of present voters of this type
+        for (let t = 0; t < numberOfTypes; t++) model += " t_" + t + " <= "+profile[t].numberOfVoters+"\n";
+
+        // Total number of voters to remove is encoded in "sum"
+        model += " t_0";
+        for (let t = 1; t < numberOfTypes; t++) model += " + t_" + t;
+        model += " - sum = 0\n";
+
+        // Alternative c is Condorcet winner
+        for (let a = 0; a < alternativeSize; a++) if (a !== c) {
+            // model += " " + margin[c][a] + " ";
+            // For each voter type check whether a is ranked above or below c
+            for (let t = 0; t < numberOfTypes; t++) {
+                model += (profile[t].relation.indexOf(a) > profile[t].relation.indexOf(c) ? " - " : " + " ) + "t_"+t;
+            }
+            if (margin[c][a] !== 0) model += " >= " + (-1 * margin[c][a] + 1) + "\n";
+            else model += " >= 1\n";
+        }
+        model += "END";
+
+        let fileName = "SCIP/Young."+c+".for.model.ID."+model.hashCode()+".lp";
+        fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
+        let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
+        execSync('rm '+fileName); // Delete the temporary file
+
+        let solutionMap = {sum: Number.MAX_SAFE_INTEGER};
+        let solutionArea = false;
+        let feasible = false;
+        for (let line of output.split('\n')) {
+            if (line.includes("[infeasible]") || line.includes("[unspecified]") || line.includes("[time limit reached]")) {
+                break;
+            }
+            if (line.includes("[optimal]")) {
+                feasible = true;
+            }
+            if (feasible && solutionArea && !line.includes("All other variables are zero") && line.includes("\t")) {
+                let splitLine = line.split("\t");
+                for (let s = 0; s < splitLine.length; s = s+2) {
+                    solutionMap[splitLine[s]] = splitLine[s+1];
+                }
+            }
+            else if (line.includes("Primal solution (name, value):")) solutionArea = true;
+        }
+        let numberOfVotersToRemove = Number.MAX_SAFE_INTEGER;
+        if (feasible && solutionMap["sum"] < Number.MAX_SAFE_INTEGER) numberOfVotersToRemove = solutionMap["sum"];
+
+        if (numberOfVotersToRemove < currentLowest) {
+            winners = [];
+            winners.push(c);
+            tooltip = numberOfVotersToRemove + " voters need to be removed.";
+            currentLowest = numberOfVotersToRemove;
+        }
+        else if (numberOfVotersToRemove === currentLowest) winners.push(c);
+    }
+
+    return {
+        success: true,
+        type: types.Lotteries,
+        tooltip: tooltip,
+        result: helper.getWinnerLotteries(winners.sort(),alternativeSize)
+    }
+};
+
+/**
  * Compute the Condorcet winner of a given data object (or all alternatives if there is none)
  */
 exports.condorcet = function condorcet(data) {

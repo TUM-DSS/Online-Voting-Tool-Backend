@@ -157,7 +157,17 @@ function _getLotteryFromLPSolution(lottery,model) {
 function _getExactLotteryFromLPSolution(lottery,model) {
     let fileName = "SCIP/Efficiency.for.model.ID."+model.hashCode()+".lp";
     fs.writeFileSync(fileName, model); // Write the file SYNCHRONOUSLY (!)
-    let output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio:[]}).toString();
+    let output;
+    try {
+        output = execSync('./SCIP/bin/soplex --loadset=SCIP/bin/exact.set ' + fileName + ' -X', {stdio: []}).toString();
+    }
+    catch (e) {
+        execSync('rm '+fileName); // Delete the temporary file
+        return {
+            success: false,
+            msg: "Optimization failed!"
+        }
+    }
     execSync('rm '+fileName); // Delete the temporary file
 
     let solutionMap = { epsilon: "0"};
@@ -308,6 +318,7 @@ function _getExactPairwiseComparisonLP(lottery,preferenceProfile) {
     let rGoal = "";
     for (i = 0; i < nrOfVoters; i++) {
         rGoal+=( i===0 ? "  " : "+ ")+_getEpsilonName(i)+" ";
+        if (i%20 === 0) rGoal += "\n";
     }
     model += rGoal + " - epsilon = 0\n";
 
@@ -502,6 +513,7 @@ function _getExactStochasticDominanceLP(lottery,preferenceProfile) {
         for (let j=0; j< nrOfCandidates; j++) {
             rGoal += (i === 0 && j === 0 ? "" : " + ")+_rMatrixName(i,j)+" ";
         }
+        if (i%20 === 0) rGoal += "\n";
     }
 
     model += rGoal + " - epsilon = 0\n";
