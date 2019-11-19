@@ -771,7 +771,7 @@ exports.young = function young(data) {
         let numberOfVotersToRemove = Number.MAX_SAFE_INTEGER;
         if (feasible && solutionMap["sum"] < Number.MAX_SAFE_INTEGER) numberOfVotersToRemove = solutionMap["sum"];
 
-        if (numberOfVotersToRemove < currentLowest) {
+        if (parseInt(numberOfVotersToRemove) < parseInt(currentLowest)) {
             winners = [];
             winners.push(c);
             tooltip = numberOfVotersToRemove + " voters need to be removed.";
