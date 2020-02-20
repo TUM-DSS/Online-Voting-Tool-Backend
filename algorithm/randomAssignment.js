@@ -406,8 +406,9 @@ exports.pra = function pra(data) {
     }
 
     // Equal treatment of equals (# constraints: size * # pairs of equal preferences)
+    // Array comparision inspired by https://stackoverflow.com/a/13523757/4050546
     for (let v1 = 0; v1 < size; v1++) for (let v2 = v1 + 1; v2 < size; v2++)
-        if (profile[voterTypeIndex[v1]].relation === profile[voterTypeIndex[v2]].relation)
+        if (profile[voterTypeIndex[v1]].relation.every(function(u, i) { return u === profile[voterTypeIndex[v2]].relation[i];}))
             for (let a = 0; a < size; a++)
                 model += " p_" + v1 + "_" + a + " - p_" + v2 + "_" + a + "  = 0\n";
 
