@@ -458,9 +458,22 @@ exports.schulze = function schulze(data) {
         }
     }
     let winners = [];
-    let score = helper.getFullMargins(stair).map(arr => arr.reduce((acc,val)=> acc + (val > 0 ? 1 : 0)));
-    let winScore = Math.max(...score);
-    for (i = 0; i < size; i++) if (score[i] === winScore) winners.push(i);
+    // console.log("Staircase is:\n"+util.inspect(helper.getFullMargins(stair)));
+    // Get rows with most positive entries
+    // let score = helper.getFullMargins(stair).map(arr => arr.reduce((acc,val)=> acc + (val > 0 ? 1 : 0)));
+    // let winScore = Math.max(...score);
+    // for (i = 0; i < size; i++) if (score[i] === winScore) winners.push(i);
+
+    // Alternative (and different) version: Get all rows without negative entries
+    let fullStair = helper.getFullMargins(stair);
+    for (i = 0; i < size; i++) {
+        let potential = true;
+        for (j = 0; j < size; j++) {
+            if (j !== i && fullStair[i][j] < 0) potential = false;
+        }
+        if (potential) winners.push(i);
+    }
+
 
     return {
         success:true,
