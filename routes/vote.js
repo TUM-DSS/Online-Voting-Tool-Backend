@@ -121,6 +121,10 @@ router.post("",(req,res,next) => {
         //     response = socialChoice.topCycle(req.body);
         //     break;
 
+        case "split cycle":
+            response = socialChoice.splitCycle(req.body);
+            break;
+
         case "uncovered set":
             response = socialChoice.uncoveredSet(req.body);
             break;
