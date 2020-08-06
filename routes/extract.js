@@ -40,6 +40,23 @@ module.exports.extract = extract;
 function extractOld (staircase) {
     let voteSize = staircase[0].length+1;
 
+    // Assure that the input only contains integers and is of correct parity
+    staircase[0][0] = Math.round(staircase[0][0]); // The first entry is rounded to nearest integer
+    let parity = Math.abs(staircase[0][0] % 2); // The parity is defined by the first entry
+    for(let i=0; i<staircase.length; i++) {
+        for(let j=0; j<staircase[i].length; j++) {
+            if(!Number.isInteger(staircase[i][j])) {
+                if (Math.abs(Math.ceil(staircase[i][j]) % 2) === parity) {
+                    staircase[i][j] = Math.ceil(staircase[i][j]);
+                }
+                else {
+                    staircase[i][j] = Math.floor(staircase[i][j]);
+                }
+                // console.log(i+" "+j+": "+staircase[i][j]);
+            }
+        }
+    }
+
     let pdic = {}
     do {
         //Get the biggest Element of the Staircase
@@ -159,16 +176,28 @@ function extract (staircase) {
     //     console.log(`${file} ${err ? 'does not exist' : 'exists'}`);
     // });
 
+    // Check whether there are non-integer values
+    let nonIntegerValues = false;
+    for(let i=0; i<staircase.length; i++) {
+        for(let j=0; j<staircase[i].length; j++) {
+            if(!Number.isInteger(staircase[i][j])) {
+                nonIntegerValues = true;
+            }
+        }
+    }
 
     // Start with the largest margin as the first try for the minimal number of voters
     let maxRow = margin.map(function(row){ return Math.max.apply(Math, row); });
-    let n = Math.max.apply(null, maxRow);
+    let n = Math.floor(Math.max.apply(null, maxRow));
     // Start with the largest sum of the weights of any three-cycle
     // Improvement by Florian: Also take into account negative weights, i.e., three-cycles which are actually transitive
     for (let i = 0; i < size; i++) {
         for (let j = 0; j < size; j++) { // if (margin[i][j] > 0)
             for (let k = 0; k < size; k++) { // if (margin[j][k] > 0 && margin[k][i] > 0)
-                let sum = margin[i][j] + margin[j][k] + margin[k][i];
+                let value1 = Math.sign(margin[i][j])*Math.floor(Math.abs(margin[i][j]));
+                let value2 = Math.sign(margin[j][k])*Math.floor(Math.abs(margin[j][k]));
+                let value3 = Math.sign(margin[k][i])*Math.floor(Math.abs(margin[k][i]));
+                let sum = value1 + value2 + value3;
                 if (n < sum) n = sum;
             }
         }
@@ -176,13 +205,15 @@ function extract (staircase) {
     if (n === 0)
         n = 2;
 
-    // Compute the backup solution in advance
-    let backup = extractOld(staircase);
+    // Compute the backup solution in advance (via hard copy just to be sure)
+    let backup = extractOld(JSON.parse(JSON.stringify(staircase)));
     let voterCount = 0;
     for (let prof of backup.profile) {
         voterCount += prof.numberOfVoters;
     }
-    if (voterCount === n) {
+    // If the backup solution is already minimal, then return it
+    // Attention: This prevents any randomization otherwise used for finding a minimal profile
+    if (voterCount === n && !nonIntegerValues) {
         backup.minimal = true;
         return backup;
     }
@@ -202,7 +233,7 @@ function extract (staircase) {
     try {
         // Check if there is preference profile with exactly n voters
         do {
-            console.log("Checking for "+n);
+            // console.log("Checking for "+n);
             voterTimeoutLeft = totalStartTime + (totalTimeout * 1000) - (+new Date());
             if (voterTimeoutLeft < 0) {
                 throw "Timeout!";
@@ -243,7 +274,36 @@ function extract (staircase) {
                         for (let v = 0; v < n; v++) {
                             sum += " + v_"+v+"_d_"+i+"_"+j + " - v_"+v+"_d_"+j+"_"+i;
                         }
-                        modelStringForSCIP += sum + " = " + margin[i][j] + "\n";
+                        let thisMargin = margin[i][j];
+
+                        if (thisMargin % 1 === 0) {
+                            modelStringForSCIP += sum + " = " + thisMargin + "\n";
+                        }
+                        else if (thisMargin > 0 && thisMargin % 1 < 0.5) {
+                            modelStringForSCIP += sum + " <= " + thisMargin + "\n";
+                            modelStringForSCIP += sum + " >= " + 0 + "\n";
+                        }
+                        else if (thisMargin > 0 && thisMargin % 1 > 0.5) {
+                            modelStringForSCIP += sum + " >= " + thisMargin + "\n";
+                        }
+                        else if (thisMargin > 0 && thisMargin % 1 === 0.5) {
+                            modelStringForSCIP += sum + " >= " + (thisMargin-1) + "\n";
+                            modelStringForSCIP += sum + " <= " + (thisMargin+1) + "\n";
+                        }
+                        else if (thisMargin < 0 && thisMargin % 1 > -0.5) {
+                            modelStringForSCIP += sum + " >= " + thisMargin + "\n";
+                            modelStringForSCIP += sum + " <= " + 0 + "\n";
+                        }
+                        else if (thisMargin < 0 && thisMargin % 1 < -0.5) {
+                            modelStringForSCIP += sum + " <= " + thisMargin + "\n";
+                        }
+                        else if (thisMargin < 0 && thisMargin % 1 === -0.5) {
+                            modelStringForSCIP += sum + " >= " + (thisMargin-1) + "\n";
+                            modelStringForSCIP += sum + " <= " + (thisMargin+1) + "\n";
+                        }
+                        else {
+                            throw "This case was not planned: " + thisMargin;
+                        }
                     }
                 }
             }
@@ -266,7 +326,11 @@ function extract (staircase) {
             //SCIP: ./SCIP/bin/scip -c "read problem.lp set limits time 1 optimize display solution quit"
             // SoPlex: ./SCIP/bin/soplex --loadset=SCIP/bin/exact.set SCIP/problem.lp -X
             // startTime = (+new Date());
-            let output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time ' + (voterTimeoutLeft/1000) + ' optimize display solution quit"').toString();
+            // Random seed to get different results when searching for profiles with specific manipulator
+            let randomSeedOne = Math.floor(Math.random() * 2147483647);
+            let randomSeedTwo = Math.floor(Math.random() * 2147483647);
+            let output = execSync('./SCIP/bin/scip -c "read '+fileName+' set limits time ' + (voterTimeoutLeft/1000) + ' set randomization randomseedshift '+randomSeedOne+' set randomization permutationseed '+randomSeedTwo+' optimize display solution quit"').toString();
+            // console.log(output);
             // console.log("Solve Time: "+ (((+new Date()) - startTime) / 1000));
 
             // startTime = (+new Date());
@@ -354,7 +418,8 @@ function extract (staircase) {
             }
 
             // If not, increment (or decrement in case of downward optimization) n by two and start again;
-            n = downwardOptimization ? n - 2 : n + 2;
+            let step = nonIntegerValues ? 1 : 2;
+            n = downwardOptimization ? n - step : n + step;
         } while (true);
     }
     catch (e) {
