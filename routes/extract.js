@@ -45,6 +45,9 @@ function extractOld (staircase) {
     let parity = Math.abs(staircase[0][0] % 2); // The parity is defined by the first entry
     for(let i=0; i<staircase.length; i++) {
         for(let j=0; j<staircase[i].length; j++) {
+            if (i===0 && j===0) {
+                continue;
+            }
             if(!Number.isInteger(staircase[i][j])) {
                 if (Math.abs(Math.ceil(staircase[i][j]) % 2) === parity) {
                     staircase[i][j] = Math.ceil(staircase[i][j]);
@@ -53,6 +56,9 @@ function extractOld (staircase) {
                     staircase[i][j] = Math.floor(staircase[i][j]);
                 }
                 // console.log(i+" "+j+": "+staircase[i][j]);
+            }
+            else if (Math.abs(staircase[i][j] % 2) !== parity) {
+                staircase[i][j] = staircase[i][j] > 0 ? staircase[i][j] + 1 : staircase[i][j] - 1;
             }
         }
     }
