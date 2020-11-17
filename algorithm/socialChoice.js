@@ -98,7 +98,7 @@ exports.borda = function borda(data) {
                         return {
                             success: true,
                             type: types.Lotteries,
-                            tooltip: "Borda scores: "+score,
+                            tooltip: "Borda scores: "+score.toString().replace(/,/g,", "),
                             result: lotteries
                         }
                     }
@@ -108,7 +108,7 @@ exports.borda = function borda(data) {
             return {
                 success: true,
                 type: types.Lotteries,
-                tooltip: "Ultimate scoring rule winner with Borda scores: "+score,
+                tooltip: "Ultimate scoring rule winner with Borda scores: "+score.toString().replace(/,/g,", "),
                 result: lotteries
             }
         }
@@ -117,7 +117,7 @@ exports.borda = function borda(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Borda scores: "+score,
+        tooltip: "Borda scores: "+score.toString().replace(/,/g,", "),
         result: lotteries
     }
 };
@@ -141,7 +141,7 @@ exports.plurality = function plurality(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Scores: "+score,
+        tooltip: "Scores: "+score.toString().replace(/,/g,", "),
         result: lotteries
     }
 };
@@ -168,7 +168,7 @@ exports.bucklin = function bucklin(data) {
         for (let i = 0; i < profile.length; i++) {
             score[profile[i].relation[a]] += profile[i].numberOfVoters;
         }
-        tooltip += "Round " + (a+1) + ": " + score + '\n';
+        tooltip += "Round " + (a+1) + ": " + score.toString().replace(/,/g,", ") + '\n';
         //Find highest (a+1)-Bucklin Score
         winScore = Math.max(...score);
         if(winScore > majority) {
@@ -206,7 +206,7 @@ exports.antiPlurality = function antiPlurality(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Veto Scores: "+score,
+        tooltip: "Veto Scores: "+score.toString().replace(/,/g,", "),
         result: lotteries
     }
 };
@@ -273,7 +273,7 @@ exports.pluralityWithRunoff = function pluralityWithRunoff(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Scores: "+score,
+        tooltip: "Scores: "+score.toString().replace(/,/g,", "),
         result: lotteries
     }
 };
@@ -471,7 +471,7 @@ exports.tideman = function tideman(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Scores: " + score,
+        tooltip: "Scores: " + score.toString().replace(/,/g,", "),
         result: lotteries
     }
 };
@@ -492,7 +492,7 @@ exports.maximin = function maximin(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Row Minima: " + mini,
+        tooltip: "Row Minima: " + mini.toString().replace(/,/g,", "),
         result: lotteries
     }
 }
@@ -508,7 +508,10 @@ exports.copeland = function copeland(data) {
 
     for (let i = 0; i < alternativesSize; i++) {
         for (let j = 0; j < alternativesSize; j++) {
-            copelandScore[i] += (margin[i][j] > 0 ? 1 : -1);
+            if (i !== j) {
+                copelandScore[i] += (margin[i][j] > 0 ? 1 : (margin[i][j] === 0 ? 0.5 : 0));
+            }
+
         }
     }
 
@@ -522,7 +525,7 @@ exports.copeland = function copeland(data) {
     return {
         success: true,
         type: types.Lotteries,
-        tooltip: "Scores: " + copelandScore,
+        tooltip: "Scores: " + copelandScore.toString().replace(/,/g,", "),
         result: lottery
     }
 };
